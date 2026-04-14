@@ -1,0 +1,73 @@
+data "aws_caller_identity" "current" {}
+
+#============================== Frontend Bucket =================================#
+
+resource "aws_s3_bucket" "frontend_bucket" {
+  bucket           = format("%s-%s-%s-an", var.frontend_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
+  bucket_namespace = "account-regional"
+}
+
+resource "aws_s3_bucket_versioning" "frontend_bucket_versioning" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+  versioning_configuration {
+    status = var.frontend_bucket_versioning_status
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "frontend_bucket_server_side_encryption_configuration" {
+  bucket = aws_s3_bucket.frontend_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+#============================== Uploads Bucket =================================#
+
+resource "aws_s3_bucket" "uploads_bucket" {
+  bucket           = format("%s-%s-%s-an", var.uploads_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
+  bucket_namespace = "account-regional"
+}
+
+resource "aws_s3_bucket_versioning" "uploads_bucket_versioning" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+  versioning_configuration {
+    status = var.uploads_bucket_versioning_status
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "uploads_bucket_server_side_encryption_configuration" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+#============================== Processed Bucket =================================#
+
+resource "aws_s3_bucket" "processed_bucket" {
+  bucket           = format("%s-%s-%s-an", var.processed_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
+  bucket_namespace = "account-regional"
+}
+
+resource "aws_s3_bucket_versioning" "processed_bucket_versioning" {
+  bucket = aws_s3_bucket.processed_bucket.id
+  versioning_configuration {
+    status = var.processed_bucket_versioning_status
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "processed_bucket_server_side_encryption_configuration" {
+  bucket = aws_s3_bucket.processed_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}

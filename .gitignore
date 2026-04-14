@@ -1,0 +1,33 @@
+# Project docs excluded for now
+AGENTS.md
+docs/
+
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Build artifacts
+dist/
+dist-node/
+*.tsbuildinfo
+
+# Environment and local config
+.env
+.env.*
+
+# Terraform local/state artifacts
+.terraform/
+**/.terraform/
+*.tfstate
+*.tfstate.*
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
