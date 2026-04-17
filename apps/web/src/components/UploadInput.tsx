@@ -1,334 +1,483 @@
-import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { UploadIcon, CompressIcon, AISparkleIcon } from './Icons';
-import { CustomDropdown } from './CustomDropdown';
+import React, {useState, useCallback, useRef} from "react";
+import {CustomDropdown, DropdownContext} from "./CustomDropdown";
+import {ProcessingOverlay} from "./ProcessingOverlay";
+import {
+  createBatchUpload,
+  uploadToPresignedUrl,
+  getBatchStatus,
+  getJobStatus,
+  getBatchDownload,
+  type UploadSettings,
+  type CreateBatchResponse,
+} from "../api";
 
-// API module for backend integration
-// Import types and functions when ready:
-// import { API_ENDPOINTS, apiRequest, uploadToS3, ... } from '../api';
-// See src/api/index.ts for full API documentation and types
+// ──────────────────────────── helpers ────────────────────────────────────────
 
-const MAX_FILES = 10;
-const MAX_FILE_SIZE_MB = 20;
-
-interface FileWithPreview {
-  file: File;
-  id: string;
-  preview: string;
-}
-
-interface UploadState {
-  isDragging: boolean;
-  files: FileWithPreview[];
-  compressionLevel: string;
-  outputFormat: string;
-}
-
-const compressionOptions = [
-  { value: 'low', label: 'Low (Better Quality)' },
-  { value: 'medium', label: 'Medium (Balanced)' },
-  { value: 'high', label: 'High (Smaller Size)' },
+const FORMAT_OPTIONS = [
+  {value: "WEBP", label: "WebP (recommended)"},
+  {value: "JPEG", label: "JPEG"},
+  {value: "PNG", label: "PNG"},
 ];
 
-const formatOptions = [
-  { value: 'original', label: 'Keep Original' },
-  { value: 'webp', label: 'Convert to WebP' },
-  { value: 'jpeg', label: 'Convert to JPEG' },
-  { value: 'png', label: 'Convert to PNG' },
+const QUALITY_OPTIONS = [
+  {value: "95", label: "Quality 95 – Lossless-like"},
+  {value: "80", label: "Quality 80 – High quality"},
+  {value: "65", label: "Quality 65 – Balanced"},
+  {value: "50", label: "Quality 50 – Small size"},
 ];
 
-// Close icon component
-const CloseIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M18 6L6 18M6 6L18 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
+const MAX_WIDTH_OPTIONS = [
+  {value: "0", label: "No resize"},
+  {value: "1920", label: "Max 1920 px"},
+  {value: "1280", label: "Max 1280 px"},
+  {value: "800", label: "Max 800 px"},
+];
 
-// Plus icon component
-const PlusIcon: React.FC<{ className?: string }> = ({ className = '' }) => (
-  <svg className={className} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-    <path d="M12 5V19M5 12H19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+const MAX_FILES = 20;
+const MAX_FILE_MB = 20;
+
+function prettySize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+// ──────────────────────────── component ──────────────────────────────────────
+
+type AppPhase = "idle" | "uploading" | "processing" | "done" | "error";
 
 export const UploadInput: React.FC = () => {
-  const [state, setState] = useState<UploadState>({
-    isDragging: false,
-    files: [],
-    compressionLevel: 'medium',
-    outputFormat: 'original',
-  });
+  // Dropdown context for the settings panel
+  const [openDropdownId, setOpenDropdownId] = useState<string | null>(null);
+
+  // Settings
+  const [format, setFormat] = useState<string>("WEBP");
+  const [quality, setQuality] = useState<string>("80");
+  const [maxWidth, setMaxWidth] = useState<string>("1920");
+
+  // Files
+  const [files, setFiles] = useState<File[]>([]);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const addMoreInputRef = useRef<HTMLInputElement>(null);
 
-  // Cleanup preview URLs on unmount
-  useEffect(() => {
-    return () => {
-      state.files.forEach((f) => URL.revokeObjectURL(f.preview));
-    };
-  }, []);
+  // Processing state
+  const [phase, setPhase] = useState<AppPhase>("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [errorMessage, setErrorMessage] = useState("");
+  const [batchResponse, setBatchResponse] =
+    useState<CreateBatchResponse | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
 
-  const addFiles = useCallback((newFiles: File[]) => {
-    const imageFiles = newFiles.filter((file) => file.type.startsWith('image/'));
-    
-    setState((prev) => {
-      const remainingSlots = MAX_FILES - prev.files.length;
-      const filesToAdd = imageFiles.slice(0, remainingSlots);
-      
-      const newFileObjects: FileWithPreview[] = filesToAdd.map((file) => ({
-        file,
-        id: `${file.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        preview: URL.createObjectURL(file),
-      }));
+  // ── File validation ───────────────────────────────────────────────────────
 
-      return {
-        ...prev,
-        files: [...prev.files, ...newFileObjects],
-      };
+  const addFiles = useCallback((incoming: File[]) => {
+    const valid = incoming.filter((f) => {
+      if (!ACCEPTED_TYPES.includes(f.type)) return false;
+      if (f.size > MAX_FILE_MB * 1024 * 1024) return false;
+      return true;
+    });
+    setFiles((prev) => {
+      const merged = [...prev, ...valid];
+      return merged.slice(0, MAX_FILES);
     });
   }, []);
 
-  const removeFile = useCallback((id: string) => {
-    setState((prev) => {
-      const fileToRemove = prev.files.find((f) => f.id === id);
-      if (fileToRemove) {
-        URL.revokeObjectURL(fileToRemove.preview);
-      }
-      return {
-        ...prev,
-        files: prev.files.filter((f) => f.id !== id),
+  const removeFile = (idx: number) =>
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+
+  // ── Drag & drop ───────────────────────────────────────────────────────────
+
+  const onDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(true);
+  };
+  const onDragLeave = () => setIsDragOver(false);
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    addFiles(Array.from(e.dataTransfer.files));
+  };
+
+  // ── Upload flow ───────────────────────────────────────────────────────────
+
+  const handleCompress = async () => {
+    if (files.length === 0) return;
+
+    try {
+      setPhase("uploading");
+      setUploadProgress(0);
+
+      const settings: UploadSettings = {
+        quality: parseInt(quality, 10),
+        format: format as "WEBP" | "JPEG" | "PNG",
+        max_width: parseInt(maxWidth, 10),
       };
-    });
-  }, []);
 
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setState((prev) => ({ ...prev, isDragging: true }));
-  }, []);
+      // 1. Create batch → get presigned URLs
+      const batchData = await createBatchUpload({
+        files: files.map((f) => ({
+          filename: f.name,
+          content_type: f.type || "image/jpeg",
+        })),
+        settings,
+      });
+      setBatchResponse(batchData);
 
-  const handleDragLeave = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setState((prev) => ({ ...prev, isDragging: false }));
-  }, []);
+      // 2. Upload each file to S3 via presigned URL
+      const totalBytes = files.reduce((acc, f) => acc + f.size, 0);
+      const uploadedBytesMap = new Map<string, number>();
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setState((prev) => ({ ...prev, isDragging: false }));
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    addFiles(droppedFiles);
-  }, [addFiles]);
+      await Promise.all(
+        batchData.jobs.map(async (job) => {
+          const file = files.find((f) => f.name === job.filename)!;
+          await uploadToPresignedUrl(
+            job.upload_url,
+            file,
+            (progressPercent) => {
+              const bytesForThisFile = (progressPercent / 100) * file.size;
+              uploadedBytesMap.set(job.filename, bytesForThisFile);
 
-  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const selectedFiles = Array.from(e.target.files || []);
-    addFiles(selectedFiles);
-    // Reset input so same file can be selected again
-    e.target.value = '';
-  }, [addFiles]);
+              let totalUploaded = 0;
+              uploadedBytesMap.forEach((bytes) => {
+                totalUploaded += bytes;
+              });
 
-  const handleDropZoneClick = () => {
-    if (state.files.length === 0) {
-      fileInputRef.current?.click();
+              // Ensure we don't accidentally exceed 100 on rounding weirdness
+              setUploadProgress(
+                Math.min(100, Math.round((totalUploaded / totalBytes) * 100)),
+              );
+            },
+          );
+        }),
+      );
+
+      // 3. Hand off to processing overlay
+      setPhase("processing");
+    } catch (err) {
+      setErrorMessage((err as Error).message);
+      setPhase("error");
     }
   };
 
-  const handleAddMoreClick = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    addMoreInputRef.current?.click();
+  const handleProcessingComplete = async (batchId: string) => {
+    try {
+      const dl = await getBatchDownload(batchId);
+      setDownloadUrl(dl.download_url);
+      setPhase("done");
+    } catch (err) {
+      setErrorMessage((err as Error).message);
+      setPhase("error");
+    }
   };
 
-  const handleCompress = useCallback(async () => {
-    if (state.files.length === 0) return;
-
-    // TODO: Implement when API Gateway endpoints are ready
-    console.log('Starting compression with settings:', {
-      files: state.files.map(f => f.file),
-      compressionLevel: state.compressionLevel,
-      outputFormat: state.outputFormat,
-    });
-  }, [state]);
-
-  const totalSize = state.files.reduce((acc, f) => acc + f.file.size, 0);
-  const formatSize = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  const handleProcessingError = (msg: string) => {
+    setErrorMessage(msg);
+    setPhase("error");
   };
 
-  const canAddMore = state.files.length < MAX_FILES;
+  const reset = () => {
+    setFiles([]);
+    setPhase("idle");
+    setErrorMessage("");
+    setBatchResponse(null);
+    setDownloadUrl("");
+    setUploadProgress(0);
+  };
+
+  // ── Render helpers ────────────────────────────────────────────────────────
+
+  if (phase === "done") {
+    return (
+      <div className="w-full max-w-[760px] rounded-3xl bg-[#0a0a0a]/90 backdrop-blur-xl shadow-2xl border border-white/10 p-10 flex flex-col items-center gap-6 text-center">
+        <div className="w-20 h-20 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+          <svg
+            className="w-10 h-10 text-emerald-400"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 className="font-schibsted font-bold text-2xl text-white mb-2">
+            All done!
+          </h3>
+          <p className="text-gray-400 text-sm">
+            Your compressed images are ready to download.
+          </p>
+        </div>
+        <a
+          href={downloadUrl}
+          id="download-button"
+          download
+          className="px-8 py-3 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-schibsted font-semibold text-base shadow-[0_0_15px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] transition-all"
+        >
+          Download Images
+        </a>
+        <button
+          onClick={reset}
+          className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
+        >
+          Compress more images
+        </button>
+      </div>
+    );
+  }
+
+  if (phase === "error") {
+    return (
+      <div className="w-full max-w-[760px] rounded-3xl bg-[#0a0a0a]/90 backdrop-blur-xl shadow-2xl border border-white/10 p-10 flex flex-col items-center gap-6 text-center">
+        <div className="w-20 h-20 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/20">
+          <svg
+            className="w-10 h-10 text-red-500"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M6 18L18 6M6 6l12 12"
+            />
+          </svg>
+        </div>
+        <div>
+          <h3 className="font-schibsted font-bold text-2xl text-white mb-2">
+            Something went wrong
+          </h3>
+          <p className="text-red-400 text-sm max-w-sm">{errorMessage}</p>
+        </div>
+        <button
+          onClick={reset}
+          className="px-8 py-3 rounded-xl bg-white/10 border border-white/20 text-white font-schibsted font-semibold text-base hover:bg-white/20 transition-colors"
+        >
+          Try again
+        </button>
+      </div>
+    );
+  }
 
   return (
-    <div className="w-full max-w-[728px]">
-      {/* Main Upload Card */}
-      <div
-        className="relative rounded-[20px] backdrop-blur-md shadow-2xl"
-        style={{ backgroundColor: 'rgba(0,0,0,0.28)' }}
-      >
-        {/* Top Row - Credits & AI Badge */}
-        <div className="flex items-center justify-between px-5 py-3.5">
-          <div className="flex items-center gap-2.5">
-            <span className="font-schibsted font-medium text-sm text-white/90">
-              {state.files.length > 0 
-                ? `${state.files.length}/${MAX_FILES} images selected` 
-                : '50/100 free compressions'}
-            </span>
-            <button className="px-3 py-1 rounded-lg text-xs font-schibsted font-semibold text-black bg-upgrade-green hover:opacity-90 transition-opacity">
-              Upgrade
-            </button>
-          </div>
-          <div className="flex items-center gap-2">
-            <AISparkleIcon className="w-4 h-4 text-white/80" />
-            <span className="font-schibsted font-medium text-sm text-white/80">
-              Smart Compression AI
-            </span>
-          </div>
-        </div>
+    <DropdownContext.Provider value={{openDropdownId, setOpenDropdownId}}>
+      {/* Processing overlay rendered outside the card */}
+      {phase === "processing" && batchResponse && (
+        <ProcessingOverlay
+          batchId={batchResponse.batch_id}
+          jobs={batchResponse.jobs}
+          onComplete={handleProcessingComplete}
+          onError={handleProcessingError}
+          getBatchStatus={getBatchStatus}
+          getJobStatus={getJobStatus}
+        />
+      )}
 
-        {/* Main Drop Zone */}
+      <div className="w-full max-w-[760px] rounded-3xl bg-[#0a0a0a]/90 backdrop-blur-xl shadow-2xl border border-white/10 overflow-visible">
+        {/* ── Drop zone ──────────────────────────────────────────────── */}
         <div
-          className={`mx-3 mb-3 bg-white rounded-2xl shadow-lg transition-all ${
-            state.files.length === 0 ? 'cursor-pointer hover:bg-gray-50' : ''
-          } ${state.isDragging ? 'ring-2 ring-indigo-500 bg-indigo-50' : ''}`}
-          onClick={handleDropZoneClick}
-          onDragOver={handleDragOver}
-          onDragLeave={handleDragLeave}
-          onDrop={handleDrop}
+          id="drop-zone"
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          onClick={() => files.length === 0 && fileInputRef.current?.click()}
+          className={`relative flex flex-col items-center justify-center gap-3 px-8 py-10 cursor-pointer transition-all duration-200 rounded-t-3xl ${
+            isDragOver
+              ? "bg-yellow-500/10 border-2 border-dashed border-yellow-500/50"
+              : files.length > 0
+                ? "bg-black/40 border-b border-white/10"
+                : "hover:bg-black/60 border-2 border-dashed border-white/10 hover:border-yellow-500/30 bg-black/40"
+          }`}
         >
-          {/* Hidden file inputs */}
           <input
             ref={fileInputRef}
+            id="file-input"
             type="file"
-            accept="image/*"
             multiple
+            accept={ACCEPTED_TYPES.join(",")}
             className="hidden"
-            onChange={handleFileSelect}
-          />
-          <input
-            ref={addMoreInputRef}
-            type="file"
-            accept="image/*"
-            multiple
-            className="hidden"
-            onChange={handleFileSelect}
+            onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
           />
 
-          {state.files.length === 0 ? (
-            /* Empty State */
-            <div className="flex flex-col items-center justify-center py-12 px-6">
-              <div className="w-20 h-20 mb-5 rounded-2xl bg-gradient-to-br from-indigo-100 to-purple-100 flex items-center justify-center">
-                <UploadIcon className="w-10 h-10 text-indigo-500" />
+          {files.length === 0 ? (
+            <>
+              <div className="w-14 h-14 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+                <svg
+                  className="w-7 h-7"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={1.5}
+                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
               </div>
-              <p className="font-schibsted font-semibold text-lg text-black mb-2">
-                Drop your images here
-              </p>
-              <p className="font-schibsted text-sm text-gray-text mb-5">
-                or <span className="text-indigo-600 font-medium">click to browse</span>
-              </p>
-              <p className="font-schibsted text-xs text-gray-400">
-                Supports PNG, JPEG, WebP, GIF up to {MAX_FILE_SIZE_MB}MB (max {MAX_FILES} images)
-              </p>
-            </div>
+              <div className="text-center">
+                <p className="font-schibsted font-semibold text-gray-200">
+                  Drop images here, or{" "}
+                  <span className="text-yellow-500 hover:text-yellow-400 transition-colors underline underline-offset-2">
+                    browse
+                  </span>
+                </p>
+                <p className="text-gray-500 text-xs mt-1">
+                  JPEG, PNG, WebP, GIF · max {MAX_FILE_MB} MB · up to{" "}
+                  {MAX_FILES} files
+                </p>
+              </div>
+            </>
           ) : (
-            /* Files Selected State */
-            <div className="p-4">
-              {/* Image Grid */}
-              <div className="grid grid-cols-5 gap-3 mb-4">
-                {state.files.map((fileObj) => (
+            <div className="w-full flex flex-col gap-2">
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-schibsted font-semibold text-gray-300 text-sm">
+                  {files.length} file{files.length !== 1 ? "s" : ""} selected
+                </span>
+                <button
+                  type="button"
+                  className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors font-schibsted"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fileInputRef.current?.click();
+                  }}
+                >
+                  + Add more
+                </button>
+              </div>
+              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                {files.map((f, i) => (
                   <div
-                    key={fileObj.id}
-                    className="relative group aspect-square rounded-xl overflow-hidden bg-gray-100"
+                    key={i}
+                    className="flex items-center justify-between px-3 py-2 bg-black/60 rounded-lg border border-white/5 shadow-sm"
                   >
-                    <img
-                      src={fileObj.preview}
-                      alt={fileObj.file.name}
-                      className="w-full h-full object-cover"
-                    />
-                    {/* Remove button */}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeFile(fileObj.id);
-                      }}
-                      className="absolute top-1.5 right-1.5 w-6 h-6 rounded-full bg-black/70 hover:bg-black flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <CloseIcon className="w-3.5 h-3.5 text-white" />
-                    </button>
-                    {/* File size badge */}
-                    <div className="absolute bottom-1.5 left-1.5 px-1.5 py-0.5 rounded bg-black/60 text-[10px] font-medium text-white">
-                      {formatSize(fileObj.file.size)}
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                        <svg
+                          className="w-4 h-4 text-yellow-500"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01"
+                          />
+                        </svg>
+                      </div>
+                      <span className="text-sm text-gray-300 font-schibsted truncate">
+                        {f.name}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                      <span className="text-xs text-gray-500">
+                        {prettySize(f.size)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          removeFile(i);
+                        }}
+                        className="text-gray-500 hover:text-red-400 transition-colors"
+                      >
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                      </button>
                     </div>
                   </div>
                 ))}
-
-                {/* Add More Button */}
-                {canAddMore && (
-                  <button
-                    onClick={handleAddMoreClick}
-                    className="aspect-square rounded-xl border-2 border-dashed border-gray-300 hover:border-indigo-400 hover:bg-indigo-50 flex flex-col items-center justify-center transition-colors"
-                  >
-                    <PlusIcon className="w-6 h-6 text-gray-400" />
-                    <span className="text-xs text-gray-400 mt-1">Add more</span>
-                  </button>
-                )}
-              </div>
-
-              {/* Summary and Start Button */}
-              <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-                <div>
-                  <p className="font-schibsted font-medium text-sm text-black">
-                    {state.files.length} image{state.files.length > 1 ? 's' : ''} ready
-                  </p>
-                  <p className="font-schibsted text-xs text-gray-text">
-                    Total size: {formatSize(totalSize)}
-                  </p>
-                </div>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    handleCompress();
-                  }}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-black hover:bg-gray-800 transition-colors shadow-lg"
-                >
-                  <CompressIcon className="w-5 h-5 text-white" />
-                  <span className="font-schibsted font-semibold text-sm text-white">
-                    Start Compression
-                  </span>
-                </button>
               </div>
             </div>
           )}
         </div>
 
-        {/* Bottom Row - Options with Custom Dropdowns */}
-        <div className="flex items-center justify-between px-4 pb-4 relative z-50">
-          <div className="flex items-center gap-3">
-            {/* Compression Level Dropdown */}
-            <CustomDropdown
-              id="compression-level"
-              options={compressionOptions}
-              value={state.compressionLevel}
-              onChange={(value) =>
-                setState((prev) => ({ ...prev, compressionLevel: value }))
-              }
-            />
+        {/* ── Settings row ──────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 flex-wrap px-6 py-4 bg-gradient-to-r from-yellow-600/10 to-yellow-800/10 border-y border-white/5">
+          <span className="font-schibsted font-medium text-yellow-500 text-sm mr-1">
+            Settings:
+          </span>
 
-            {/* Output Format Dropdown */}
-            <CustomDropdown
-              id="output-format"
-              options={formatOptions}
-              value={state.outputFormat}
-              onChange={(value) =>
-                setState((prev) => ({ ...prev, outputFormat: value }))
-              }
-            />
+          <CustomDropdown
+            id="format-dropdown"
+            options={FORMAT_OPTIONS}
+            value={format}
+            onChange={setFormat}
+          />
+          <CustomDropdown
+            id="quality-dropdown"
+            options={QUALITY_OPTIONS}
+            value={quality}
+            onChange={setQuality}
+          />
+          <CustomDropdown
+            id="maxwidth-dropdown"
+            options={MAX_WIDTH_OPTIONS}
+            value={maxWidth}
+            onChange={setMaxWidth}
+          />
+        </div>
+
+        {/* ── Action bar ────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between px-6 py-4 rounded-b-3xl">
+          <div className="text-xs text-gray-500 font-schibsted">
+            {files.length === 0
+              ? "No files selected"
+              : `${files.length} image${files.length !== 1 ? "s" : ""} · ${prettySize(files.reduce((a, f) => a + f.size, 0))}`}
           </div>
 
-          {/* Max file size hint */}
-          <span className="font-schibsted font-medium text-sm text-white/50">
-            Max {MAX_FILE_SIZE_MB}MB per file
-          </span>
+          {phase === "uploading" ? (
+            <div className="flex items-center gap-3">
+              <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full transition-all duration-300"
+                  style={{width: `${uploadProgress}%`}}
+                />
+              </div>
+              <span className="text-sm text-yellow-500 font-schibsted font-semibold">
+                {uploadProgress}%
+              </span>
+            </div>
+          ) : (
+            <button
+              id="compress-button"
+              type="button"
+              disabled={files.length === 0}
+              onClick={handleCompress}
+              className={`px-6 py-2.5 rounded-xl font-schibsted font-semibold text-sm transition-all duration-200 ${
+                files.length === 0
+                  ? "bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed"
+                  : "bg-gradient-to-r from-yellow-400 to-yellow-600 text-black shadow-[0_0_15px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:brightness-110"
+              }`}
+            >
+              Compress{" "}
+              {files.length > 0
+                ? `${files.length} image${files.length !== 1 ? "s" : ""}`
+                : "images"}
+            </button>
+          )}
         </div>
       </div>
-    </div>
+    </DropdownContext.Provider>
   );
 };

@@ -48,6 +48,18 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads_bucket_se
   }
 }
 
+resource "aws_s3_bucket_cors_configuration" "uploads_bucket_cors" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["PUT", "POST"]
+    allowed_origins = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
 #============================== Processed Bucket =================================#
 
 resource "aws_s3_bucket" "processed_bucket" {
@@ -69,5 +81,16 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "processed_bucket_
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "processed_bucket_cors" {
+  bucket = aws_s3_bucket.processed_bucket.id
+
+  cors_rule {
+    allowed_headers = ["*"]
+    allowed_methods = ["GET", "HEAD"]
+    allowed_origins = ["*"]
+    max_age_seconds = 3000
   }
 }

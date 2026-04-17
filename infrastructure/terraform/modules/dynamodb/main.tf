@@ -1,4 +1,4 @@
-resource "aws_dynamodb_table" "imageCompressionDynamoDBTable" {
+resource "aws_dynamodb_table" "image_compression_metadata" {
   name         = var.table_name
   billing_mode = var.billing_mode
   hash_key     = var.hash_key
@@ -15,13 +15,13 @@ resource "aws_dynamodb_table" "imageCompressionDynamoDBTable" {
   }
 
   attribute {
-    name = "jobId"
+    name = "batch_id"
     type = "S"
   }
 
   global_secondary_index {
-    name            = "jobIdIndex"
-    hash_key        = "jobId"
+    name            = "batch_id-index"
+    hash_key        = "batch_id"
     projection_type = "ALL"
   }
 

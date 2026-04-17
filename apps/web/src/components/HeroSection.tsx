@@ -16,13 +16,13 @@ export const HeroSection: React.FC = () => {
           <Badge />
 
           {/* Main Headline */}
-          <h1 className="font-fustat font-bold text-[80px] leading-none tracking-headline text-black text-center">
-            Compress Images Instantly
+          <h1 className="font-fustat font-bold text-[80px] leading-tight tracking-tight text-white text-center" style={{ textShadow: '0 4px 24px rgba(0,0,0,0.5)' }}>
+            Compress Images <span className="text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 via-yellow-500 to-yellow-600">Instantly</span>
           </h1>
 
           {/* Subtitle */}
           <p
-            className="font-fustat font-medium text-xl tracking-subtitle text-gray-text text-center max-w-[736px]"
+            className="font-fustat font-medium text-xl tracking-wide text-gray-400 text-center max-w-[736px]"
             style={{ width: '542px' }}
           >
             Upload your images and get optimized files in seconds. Reduce file sizes by up to 90% without losing quality.
@@ -74,9 +74,9 @@ const FeaturePill: React.FC<FeaturePillProps> = ({ icon, text }) => {
   };
 
   return (
-    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/80 backdrop-blur-sm shadow-sm">
-      <span className="text-gray-600">{iconMap[icon]}</span>
-      <span className="font-schibsted font-medium text-sm text-gray-700">{text}</span>
+    <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 backdrop-blur-md shadow-lg shadow-black/20">
+      <span className="text-yellow-500">{iconMap[icon]}</span>
+      <span className="font-schibsted font-medium text-sm text-gray-300">{text}</span>
     </div>
   );
 };

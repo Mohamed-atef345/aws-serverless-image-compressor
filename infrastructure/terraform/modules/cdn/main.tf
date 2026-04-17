@@ -5,7 +5,7 @@ resource "aws_cloudfront_origin_access_control" "image_compression_oac" {
   signing_protocol                  = "sigv4"
 }
 
-resource "aws_cloudfront_distribution" "s3_&_api_distribution" {
+resource "aws_cloudfront_distribution" "s3_and_api_distribution" {
   origin {
     domain_name              = var.frontend_bucket_regional_domain_name
     origin_access_control_id = aws_cloudfront_origin_access_control.image_compression_oac.id

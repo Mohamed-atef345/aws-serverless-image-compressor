@@ -18,6 +18,14 @@ output "uploads_bucket_name" {
     value = aws_s3_bucket.uploads_bucket.id
 }
 
+output "upload_bucket_arn"{
+    value = aws_s3_bucket.uploads_bucket.arn
+}
+
 output "processed_bucket_name" {
     value = aws_s3_bucket.processed_bucket.id
+}
+
+output "processed_bucket_arn"{
+    value = aws_s3_bucket.processed_bucket.arn
 }

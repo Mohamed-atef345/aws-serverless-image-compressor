@@ -1,3 +1,3 @@
-variable "lambda_invoke_arn" {
-    type = string
+variable "apigw_lambda_invoke_arn" {
+  type        = string
 }

@@ -20,7 +20,7 @@ export const Navigation: React.FC = () => {
         {/* Logo */}
         <a
           href="/"
-          className="font-schibsted font-semibold text-2xl tracking-logo text-black"
+          className="font-schibsted font-semibold text-2xl tracking-logo text-white"
         >
           ImageCompress
         </a>
@@ -31,7 +31,7 @@ export const Navigation: React.FC = () => {
             <a
               key={item.label}
               href={item.href}
-              className="flex items-center gap-1 font-schibsted font-medium text-base tracking-menu text-black hover:opacity-70 transition-opacity"
+              className="flex items-center gap-1 font-schibsted font-medium text-sm tracking-menu text-gray-300 hover:text-yellow-400 transition-colors"
             >
               {item.label}
               {item.hasDropdown && (
@@ -44,12 +44,12 @@ export const Navigation: React.FC = () => {
         {/* Right Side Buttons */}
         <div className="flex items-center gap-3">
           <button
-            className="w-[82px] h-10 font-schibsted font-medium text-base tracking-menu text-black bg-transparent hover:bg-black/5 rounded-lg transition-colors"
+            className="w-[82px] h-[38px] font-schibsted font-medium text-sm tracking-menu text-gray-300 bg-transparent hover:text-white hover:bg-white/10 rounded-lg transition-colors"
           >
             Sign Up
           </button>
           <button
-            className="w-[101px] h-10 font-schibsted font-medium text-base tracking-menu text-white bg-black hover:bg-black/80 rounded-lg transition-colors"
+            className="px-5 h-[38px] font-schibsted font-semibold text-sm tracking-menu text-black bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-300 hover:to-yellow-500 rounded-lg shadow-[0_0_15px_rgba(250,204,21,0.2)] transition-all"
           >
             Log In
           </button>

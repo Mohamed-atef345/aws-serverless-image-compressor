@@ -1,3 +1,11 @@
+resource "aws_lambda_permission" "apigw_invoke" {
+  statement_id  = "AllowAPIGatewayInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = module.apigw_lambda.apigw_lambda_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn = "${module.api_gateway.api_execution_arn}/*/*"
+}
+
 /* module "vpc" {
   source  = "./modules/vpc"
 
@@ -7,7 +15,7 @@
   enable_dns_hostnames = var.enable_dns_hostnames
   enable_dns_support = var.enable_dns_support
 }
-
+*/
 module "dynamodb" {
     source = "./modules/dynamodb"
 
@@ -17,7 +25,7 @@ module "dynamodb" {
     range_key = var.range_key
     ttl = var.ttl
 }
-*/
+
 
 module "s3_buckets" {
   source = "./modules/S3_buckets"
@@ -67,4 +75,23 @@ module "iam" {
   cloudfront_distribution_arn = module.cdn.cloudfront_distribution_arn
   frontend_bucket_arn         = module.s3_buckets.frontend_bucket_arn
   frontend_bucket_id          = module.s3_buckets.frontend_bucket_id
+  upload_bucket_arn           = module.s3_buckets.upload_bucket_arn
+  processed_bucket_arn        = module.s3_buckets.processed_bucket_arn
+  dynamodb_table_arn          = module.dynamodb.dynamodb_table_arn
+
+}
+
+module "api_gateway" {
+  source = "./modules/api gateway"
+
+  apigw_lambda_invoke_arn = module.apigw_lambda.apigw_lambda_invoke_arn
+}
+
+module "apigw_lambda" {
+  source = "./modules/lambda"
+
+  apigw_lambda_role_arn = module.iam.apigw_lambda_role_arn
+  dynamodb_table_name = var.table_name
+  uploads_bucket_name = module.s3_buckets.uploads_bucket_name
+  compressed_bucket_name = module.s3_buckets.processed_bucket_name
 }

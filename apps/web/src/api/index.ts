@@ -1,206 +1,140 @@
-/**
- * API Configuration and Types
- *
- * TODO: Replace these placeholder URLs with actual API Gateway endpoints
- * once the backend infrastructure is deployed.
- */
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
 
-// API Gateway Base URL - TODO: Set this from environment variable
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+type HttpMethod = "GET" | "POST" | "PUT";
 
-/**
- * API Endpoints
- */
-export const API_ENDPOINTS = {
-  /**
-   * POST /upload-url
-   * Request a presigned URL for direct S3 upload
-   *
-   * Request Body:
-   * {
-   *   filename: string;
-   *   contentType: string;
-   *   fileSize: number;
-   * }
-   *
-   * Response:
-   * {
-   *   uploadUrl: string;       // Presigned S3 PUT URL
-   *   objectKey: string;       // S3 object key for the uploaded file
-   *   expiresIn: number;       // URL expiration in seconds
-   * }
-   */
-  getUploadUrl: `${API_BASE_URL}/upload-url`,
-
-  /**
-   * POST /jobs
-   * Submit a new compression job after file upload
-   *
-   * Request Body:
-   * {
-   *   objectKey: string;           // S3 key from upload
-   *   compressionLevel: 'low' | 'medium' | 'high';
-   *   outputFormat: 'original' | 'webp' | 'jpeg' | 'png';
-   * }
-   *
-   * Response:
-   * {
-   *   jobId: string;
-   *   status: 'pending';
-   *   createdAt: string;        // ISO timestamp
-   * }
-   */
-  submitJob: `${API_BASE_URL}/jobs`,
-
-  /**
-   * GET /jobs/:jobId
-   * Get the status of a compression job
-   *
-   * Response:
-   * {
-   *   jobId: string;
-   *   status: 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'expired';
-   *   originalSize?: number;
-   *   compressedSize?: number;
-   *   compressionRatio?: number;
-   *   error?: string;
-   *   createdAt: string;
-   *   updatedAt: string;
-   * }
-   */
-  getJobStatus: (jobId: string) => `${API_BASE_URL}/jobs/${jobId}`,
-
-  /**
-   * GET /jobs/:jobId/download
-   * Get a presigned download URL for the compressed image
-   *
-   * Response:
-   * {
-   *   downloadUrl: string;      // Presigned S3 GET URL
-   *   filename: string;         // Suggested filename
-   *   expiresIn: number;        // URL expiration in seconds
-   * }
-   */
-  getDownloadUrl: (jobId: string) => `${API_BASE_URL}/jobs/${jobId}/download`,
-} as const;
-
-/**
- * Type definitions for API requests and responses
- */
-
-// Upload URL
-export interface UploadUrlRequest {
+export interface UploadFileDescriptor {
   filename: string;
-  contentType: string;
-  fileSize: number;
+  content_type: string;
 }
 
-export interface UploadUrlResponse {
-  uploadUrl: string;
-  objectKey: string;
-  expiresIn: number;
+export interface UploadSettings {
+  quality: number;
+  format: "WEBP" | "JPEG" | "PNG";
+  max_width: number;
 }
 
-// Submit Job
-export interface SubmitJobRequest {
-  objectKey: string;
-  compressionLevel: 'low' | 'medium' | 'high';
-  outputFormat: 'original' | 'webp' | 'jpeg' | 'png';
+export interface CreateBatchRequest {
+  files: UploadFileDescriptor[];
+  settings: UploadSettings;
 }
 
-export interface SubmitJobResponse {
-  jobId: string;
-  status: 'pending';
-  createdAt: string;
+export interface CreateBatchResponse {
+  batch_id: string;
+  jobs: Array<{
+    job_id: string;
+    filename: string;
+    upload_url: string;
+  }>;
 }
-
-// Job Status
-export type JobStatus = 'pending' | 'queued' | 'processing' | 'completed' | 'failed' | 'expired';
 
 export interface JobStatusResponse {
-  jobId: string;
-  status: JobStatus;
-  originalSize?: number;
-  compressedSize?: number;
-  compressionRatio?: number;
+  job_id: string;
+  batch_id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  filename?: string;
   error?: string;
-  createdAt: string;
-  updatedAt: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
-// Download URL
-export interface DownloadUrlResponse {
-  downloadUrl: string;
-  filename: string;
-  expiresIn: number;
+export interface BatchStatusResponse {
+  batch_id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  total_jobs: number;
+  completed_jobs: number;
+  failed_jobs: number;
+  progress_percent: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
-/**
- * API Error response structure
- */
-export interface ApiError {
-  error: string;
-  code: string;
-  message: string;
-  details?: Record<string, unknown>;
+export interface DownloadResponse {
+  download_url: string;
+  type: "single" | "zip";
+  file_count?: number;
 }
 
-/**
- * Helper function to make API requests
- * TODO: Implement proper error handling and authentication
- */
-export async function apiRequest<T>(
-  url: string,
-  options: RequestInit = {}
-): Promise<T> {
-  const response = await fetch(url, {
-    ...options,
+interface ApiErrorPayload {
+  error?: string;
+}
+
+function ensureConfiguredBaseUrl(): string {
+  if (!API_BASE_URL) {
+    throw new Error("VITE_API_BASE_URL is not configured.");
+  }
+  return API_BASE_URL;
+}
+
+async function request<T>(path: string, method: HttpMethod, body?: unknown): Promise<T> {
+  const response = await fetch(`${ensureConfiguredBaseUrl()}${path}`, {
+    method,
     headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
+      "Content-Type": "application/json",
     },
+    body: body ? JSON.stringify(body) : undefined,
   });
 
   if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.message || `API request failed: ${response.status}`);
+    let errorMessage = `Request failed (${response.status})`;
+    try {
+      const payload = (await response.json()) as ApiErrorPayload;
+      if (payload.error) {
+        errorMessage = payload.error;
+      }
+    } catch {
+      // Keep fallback message
+    }
+    throw new Error(errorMessage);
   }
 
-  return response.json();
+  return response.json() as Promise<T>;
 }
 
-/**
- * Upload a file directly to S3 using presigned URL
- */
-export async function uploadToS3(
+export function createBatchUpload(requestBody: CreateBatchRequest): Promise<CreateBatchResponse> {
+  return request<CreateBatchResponse>("/upload-url", "POST", requestBody);
+}
+
+export function getJobStatus(jobId: string): Promise<JobStatusResponse> {
+  return request<JobStatusResponse>(`/jobs/${jobId}`, "GET");
+}
+
+export function getBatchStatus(batchId: string): Promise<BatchStatusResponse> {
+  return request<BatchStatusResponse>(`/batches/${batchId}`, "GET");
+}
+
+export function getBatchDownload(batchId: string): Promise<DownloadResponse> {
+  return request<DownloadResponse>(`/batches/${batchId}/download`, "GET");
+}
+
+export async function uploadToPresignedUrl(
   presignedUrl: string,
   file: File,
-  onProgress?: (progress: number) => void
+  onProgress?: (progress: number) => void,
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     const xhr = new XMLHttpRequest();
 
-    xhr.upload.addEventListener('progress', (event) => {
-      if (event.lengthComputable && onProgress) {
-        const progress = (event.loaded / event.total) * 100;
-        onProgress(progress);
+    xhr.upload.addEventListener("progress", (event) => {
+      if (!event.lengthComputable || !onProgress) {
+        return;
       }
+      onProgress((event.loaded / event.total) * 100);
     });
 
-    xhr.addEventListener('load', () => {
+    xhr.addEventListener("load", () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         resolve();
-      } else {
-        reject(new Error(`Upload failed: ${xhr.status}`));
+        return;
       }
+      reject(new Error(`Upload failed (${xhr.status})`));
     });
 
-    xhr.addEventListener('error', () => {
-      reject(new Error('Upload failed: network error'));
+    xhr.addEventListener("error", () => {
+      reject(new Error("Upload failed due to network error."));
     });
 
-    xhr.open('PUT', presignedUrl);
-    xhr.setRequestHeader('Content-Type', file.type);
+    xhr.open("PUT", presignedUrl);
+    xhr.setRequestHeader("Content-Type", file.type || "application/octet-stream");
     xhr.send(file);
   });
 }
