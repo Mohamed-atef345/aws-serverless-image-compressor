@@ -1,18 +1,18 @@
 #================================== VPC =================================#
 
 resource "aws_vpc" "imageCompressionVPC" {
-  cidr_block = var.vpc_cidr
+  cidr_block           = var.vpc_cidr
   enable_dns_hostnames = var.enable_dns_hostnames
-  enable_dns_support = var.enable_dns_support
-  instance_tenancy = "default"
+  enable_dns_support   = var.enable_dns_support
+  instance_tenancy     = "default"
 }
 
 
 #================================== Private Subnets =================================#
 
 resource "aws_subnet" "imageCompressionPrivateSubnet1" {
-  vpc_id     = aws_vpc.imageCompressionVPC.id
-  cidr_block = var.subnet_cidrs[0]
+  vpc_id            = aws_vpc.imageCompressionVPC.id
+  cidr_block        = var.subnet_cidrs[0]
   availability_zone = var.availability_zones[0]
 
   tags = {
@@ -21,8 +21,8 @@ resource "aws_subnet" "imageCompressionPrivateSubnet1" {
 }
 
 resource "aws_subnet" "imageCompressionPrivateSubnet2" {
-  vpc_id     = aws_vpc.imageCompressionVPC.id
-  cidr_block = var.subnet_cidrs[1]
+  vpc_id            = aws_vpc.imageCompressionVPC.id
+  cidr_block        = var.subnet_cidrs[1]
   availability_zone = var.availability_zones[1]
 
   tags = {
@@ -33,9 +33,9 @@ resource "aws_subnet" "imageCompressionPrivateSubnet2" {
 #=============================== Public Subnets ======================================#
 
 resource "aws_subnet" "imageCompressionPublicSubnet1" {
-  vpc_id     = aws_vpc.imageCompressionVPC.id
-  cidr_block = var.subnet_cidrs[2]
-  availability_zone = var.availability_zones[0]
+  vpc_id                  = aws_vpc.imageCompressionVPC.id
+  cidr_block              = var.subnet_cidrs[2]
+  availability_zone       = var.availability_zones[0]
   map_public_ip_on_launch = true
 
   tags = {
@@ -44,9 +44,9 @@ resource "aws_subnet" "imageCompressionPublicSubnet1" {
 }
 
 resource "aws_subnet" "imageCompressionPublicSubnet2" {
-  vpc_id     = aws_vpc.imageCompressionVPC.id
-  cidr_block = var.subnet_cidrs[3]
-  availability_zone = var.availability_zones[1]
+  vpc_id                  = aws_vpc.imageCompressionVPC.id
+  cidr_block              = var.subnet_cidrs[3]
+  availability_zone       = var.availability_zones[1]
   map_public_ip_on_launch = true
 
   tags = {
@@ -109,7 +109,7 @@ resource "aws_route_table" "imageCompressionPrivateRouteTable" {
   vpc_id = aws_vpc.imageCompressionVPC.id
 
   route {
-    cidr_block = "0.0.0.0/0"
+    cidr_block     = "0.0.0.0/0"
     nat_gateway_id = aws_nat_gateway.imageCompressionNatGateway.id
   }
 

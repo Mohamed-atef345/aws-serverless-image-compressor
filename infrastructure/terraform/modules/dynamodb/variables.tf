@@ -1,19 +1,19 @@
 variable "table_name" {
-    type = string
+  type = string
 }
 
 variable "billing_mode" {
-    type = string
+  type = string
 }
 
 variable "hash_key" {
-    type = string
+  type = string
 }
 
 variable "range_key" {
-    type = string
+  type = string
 }
 
 variable "ttl" {
-    type = bool
+  type = bool
 }

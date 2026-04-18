@@ -1,19 +1,19 @@
 variable "domain_name" {
-    type = string
+  type = string
 }
 
 variable "cloudfront_distribution_domain_name" {
-    type = string
+  type = string
 }
 
 variable "record_type" {
-    type = string
+  type = string
 }
 
 variable "ttl_value" {
-    type = number
+  type = number
 }
 
-variable "cloudfront_distribution_hosted_zone_id"{
-    type = string
+variable "cloudfront_distribution_hosted_zone_id" {
+  type = string
 }

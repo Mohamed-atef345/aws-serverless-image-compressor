@@ -1,6 +1,6 @@
 data "archive_file" "apigw_lambda_code" {
-  type       = "zip"
-  source_dir = "${path.module}/../../../../codes/apigw_lambda"
+  type        = "zip"
+  source_dir  = "${path.module}/../../../../codes/apigw_lambda"
   output_path = "${path.module}/apigw_lambda.zip"
 }
 
@@ -8,11 +8,11 @@ data "archive_file" "apigw_lambda_code" {
 resource "aws_lambda_function" "apigw_lambda" {
   filename      = data.archive_file.apigw_lambda_code.output_path
   function_name = "apigw_lambda"
-  role          = var.apigw_lambda_role_arn 
+  role          = var.apigw_lambda_role_arn
   handler       = "handler.lambda_handler"
   code_sha256   = data.archive_file.apigw_lambda_code.output_base64sha256
   timeout       = 30
-  runtime = "python3.14"
+  runtime       = "python3.14"
 
   environment {
     variables = {

@@ -60,6 +60,15 @@ resource "aws_s3_bucket_cors_configuration" "uploads_bucket_cors" {
   }
 }
 
+resource "aws_s3_bucket_notification" "uploads_bucket_notification" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+
+  queue {
+    queue_arn = var.image_uploads_queue_arn
+    events    = ["s3:ObjectCreated:*"]
+  }
+}
+
 #============================== Processed Bucket =================================#
 
 resource "aws_s3_bucket" "processed_bucket" {

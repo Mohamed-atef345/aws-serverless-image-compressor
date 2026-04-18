@@ -1,15 +1,23 @@
 variable "apigw_lambda_role_arn" {
-    type = string
+  type = string
 }
 
 variable "dynamodb_table_name" {
-    type = string
+  type = string
 }
 
 variable "uploads_bucket_name" {
-    type = string
+  type = string
 }
 
 variable "compressed_bucket_name" {
-    type = string
+  type = string
+}
+
+variable "worker_lambda_role_arn" {
+  type = string
+}
+
+variable "image_uploads_queue_arn" {
+  type = string
 }

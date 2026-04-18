@@ -118,3 +118,15 @@ variable "s3_origin_id" {
   type    = string
   default = "imageCompressionS3Origin"
 }
+
+#================================== SQS Variables =================================#
+
+variable "message_retention_seconds" {
+  type    = number
+  default = 10800
+}
+
+variable "maxReceiveCount" {
+  type    = number
+  default = 3
+}

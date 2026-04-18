@@ -22,7 +22,7 @@ data "aws_iam_policy_document" "origin_frontend_bucket_policy" {
       values   = [var.cloudfront_distribution_arn]
     }
   }
-} 
+}
 
 resource "aws_s3_bucket_policy" "frontend_bucket_policy" {
   bucket = var.frontend_bucket_id

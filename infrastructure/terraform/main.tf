@@ -1,9 +1,9 @@
 resource "aws_lambda_permission" "apigw_invoke" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = module.apigw_lambda.apigw_lambda_name
+  function_name = module.lambda.apigw_lambda_name
   principal     = "apigateway.amazonaws.com"
-  source_arn = "${module.api_gateway.api_execution_arn}/*/*"
+  source_arn    = "${module.api_gateway.api_execution_arn}/*/*"
 }
 
 /* module "vpc" {
@@ -17,13 +17,13 @@ resource "aws_lambda_permission" "apigw_invoke" {
 }
 */
 module "dynamodb" {
-    source = "./modules/dynamodb"
+  source = "./modules/dynamodb"
 
-    table_name = var.table_name
-    billing_mode = var.billing_mode
-    hash_key = var.hash_key
-    range_key = var.range_key
-    ttl = var.ttl
+  table_name   = var.table_name
+  billing_mode = var.billing_mode
+  hash_key     = var.hash_key
+  range_key    = var.range_key
+  ttl          = var.ttl
 }
 
 
@@ -37,6 +37,7 @@ module "s3_buckets" {
   uploads_bucket_versioning_status   = var.uploads_bucket_versioning_status
   processed_bucket_name              = var.processed_bucket_name
   processed_bucket_versioning_status = var.processed_bucket_versioning_status
+  image_uploads_queue_arn            = module.sqs.image_uploads_queue_arn
 }
 
 module "cdn" {
@@ -78,20 +79,31 @@ module "iam" {
   upload_bucket_arn           = module.s3_buckets.upload_bucket_arn
   processed_bucket_arn        = module.s3_buckets.processed_bucket_arn
   dynamodb_table_arn          = module.dynamodb.dynamodb_table_arn
-
+  image_uploads_queue_arn     = module.sqs.image_uploads_queue_arn
 }
 
 module "api_gateway" {
   source = "./modules/api gateway"
 
-  apigw_lambda_invoke_arn = module.apigw_lambda.apigw_lambda_invoke_arn
+  apigw_lambda_invoke_arn = module.lambda.apigw_lambda_invoke_arn
 }
 
-module "apigw_lambda" {
+module "lambda" {
   source = "./modules/lambda"
 
-  apigw_lambda_role_arn = module.iam.apigw_lambda_role_arn
-  dynamodb_table_name = var.table_name
-  uploads_bucket_name = module.s3_buckets.uploads_bucket_name
-  compressed_bucket_name = module.s3_buckets.processed_bucket_name
+  apigw_lambda_role_arn   = module.iam.apigw_lambda_role_arn
+  dynamodb_table_name     = var.table_name
+  uploads_bucket_name     = module.s3_buckets.uploads_bucket_name
+  compressed_bucket_name  = module.s3_buckets.processed_bucket_name
+  image_uploads_queue_arn = module.sqs.image_uploads_queue_arn
+  worker_lambda_role_arn  = module.iam.worker_lambda_role_arn
+}
+
+module "sqs" {
+  source = "./modules/sqs"
+
+  message_retention_seconds = var.message_retention_seconds
+  maxReceiveCount           = var.maxReceiveCount
+  uploads_bucket_name       = var.uploads_bucket_name
+  aws_region                = var.aws_region
 }

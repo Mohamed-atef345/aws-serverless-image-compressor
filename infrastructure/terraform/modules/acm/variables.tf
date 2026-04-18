@@ -1,7 +1,7 @@
 variable "domain_name" {
-    type = string
+  type = string
 }
 
 variable "validation_method" {
-    type = string
+  type = string
 }

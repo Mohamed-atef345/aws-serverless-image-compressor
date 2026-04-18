@@ -1,5 +1,6 @@
 # Project docs excluded for now
 AGENTS.md
+CHANGELOG.md
 docs/
 
 # Dependencies
@@ -10,6 +11,9 @@ node_modules/
 dist/
 dist-node/
 *.tsbuildinfo
+layer/
+infrastructure/terraform/modules/lambda/worker_lambda.zip
+infrastructure/terraform/modules/lambda/pillow_layer.zip
 
 # Environment and local config
 .env

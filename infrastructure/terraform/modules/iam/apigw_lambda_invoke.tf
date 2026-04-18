@@ -72,8 +72,8 @@ data "aws_iam_policy_document" "apigw_lambda_least_privilege" {
 }
 
 resource "aws_iam_policy" "apigw_lambda_policy" {
-  name        = "apigw_lambda_policy"
-  policy      = data.aws_iam_policy_document.apigw_lambda_least_privilege.json
+  name   = "apigw_lambda_policy"
+  policy = data.aws_iam_policy_document.apigw_lambda_least_privilege.json
 }
 
 resource "aws_iam_role_policy_attachment" "apigw_lambda_policy_attachment" {

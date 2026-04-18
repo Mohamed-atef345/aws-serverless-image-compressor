@@ -26,3 +26,7 @@ variable "processed_bucket_name" {
 variable "processed_bucket_versioning_status" {
   type = string
 }
+
+variable "image_uploads_queue_arn" {
+  type = string
+}

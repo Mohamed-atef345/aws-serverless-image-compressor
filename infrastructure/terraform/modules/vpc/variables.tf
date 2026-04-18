@@ -1,19 +1,19 @@
 variable "availability_zones" {
-    type = list(string)
+  type = list(string)
 }
 
 variable "vpc_cidr" {
-    type = string
+  type = string
 }
 
 variable "subnet_cidrs" {
-    type = list(string)
+  type = list(string)
 }
 
 variable "enable_dns_hostnames" {
-    type = bool
+  type = bool
 }
 
 variable "enable_dns_support" {
-    type = bool
+  type = bool
 }
