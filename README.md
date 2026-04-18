@@ -105,11 +105,7 @@ image_compressor/
 │           ├── lambda/
 │           ├── route 53/
 │           ├── sqs/
-│           ├── storage/                  # scaffolded
 │           └── vpc/                      # currently commented in root
-├── docs/
-│   └── infrastructure-guide.md
-├── AGENTS.md
 ├── .gitignore
 └── README.md
 ```
