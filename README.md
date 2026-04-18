@@ -23,7 +23,7 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                  FRONTEND                                   │
 │  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐ │
-│  │   React     │───▶│  CloudFront  │───▶│         S3 (Static)             │ │
+│  │   React     │──▶│  CloudFront  │──▶│         S3 (Static)             │ │
 │  │   (Vite)    │    │     CDN      │    │      apps/web/dist              │ │
 │  └─────────────┘    └──────────────┘    └─────────────────────────────────┘ │
 └────────────────────────────┬────────────────────────────────────────────────┘
@@ -32,52 +32,52 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                 API LAYER                                   │
 │  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐ │
-│  │     WAF     │───▶│ API Gateway  │───▶│        Lambda (API)             │ │
+│  │     WAF     │──▶│ API Gateway  │──▶│        Lambda (API)             │ │
 │  │             │    │   REST API   │    │   codes/apigw_lambda/handler.py │ │
 │  └─────────────┘    └──────────────┘    └─────────────────────────────────┘ │
 └────────────────────────────┬────────────────────────────────────────────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                              PROCESSING LAYER                               │
-│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐ │
-│  │ S3 (Upload) │───▶│     SQS      │───▶│      Lambda (Worker)            │ │
-│  │   Event     │    │    Queue     │    │  codes/worker_lambda/handler.py │ │
-│  └─────────────┘    └──────────────┘    └─────────────────────────────────┘ │
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                              PROCESSING LAYER                                │
+│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐  │
+│  │ S3 (Upload) │──▶│     SQS      │──▶│      Lambda (Worker)            │  │
+│  │   Event     │    │    Queue     │    │  codes/worker_lambda/handler.py │  │
+│  └─────────────┘    └──────────────┘    └─────────────────────────────────┘  │
 │                            │                           │                     │
 │                            ▼                           ▼                     │
 │                     ┌──────────────┐         ┌─────────────────────────────┐ │
 │                     │     DLQ      │         │       S3 (Compressed)       │ │
-│                     │ Dead Letter  │         │        Output Bucket         │ │
+│                     │ Dead Letter  │         │        Output Bucket        │ │
 │                     └──────────────┘         └─────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────────────┘
                              │
                              ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                               DATA LAYER                                    │
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                               DATA LAYER                                     │
 │  ┌─────────────────────────────────────────────────────────────────────────┐ │
 │  │                               DynamoDB                                  │ │
 │  │                        Jobs / Batches Table                             │ │
 │  │        PK | SK | jobId | status | original_key | compressed_key | TTL   │ │
 │  └─────────────────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────────────────┘
+└──────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## Technology Stack
 
-| Layer | Technology |
-| --- | --- |
-| Frontend | React 19, Vite 6, TypeScript, TailwindCSS 3 |
-| CDN | CloudFront (OAC), Route 53, ACM |
-| API | API Gateway (REST, Regional), WAF |
-| API Lambda | Python 3.14, boto3 |
-| Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3 |
-| Queue | SQS Standard, Dead Letter Queue |
-| Database | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL) |
-| Storage | S3 buckets for frontend, uploads, and compressed output |
-| IaC | Terraform 1.x, AWS Provider 6.39 |
-| CI/CD | GitHub Actions with OIDC |
-| Observability | CloudWatch logs, X-Ray tracing |
+| Layer         | Technology                                                    |
+| ------------- | ------------------------------------------------------------- |
+| Frontend      | React 19, Vite 6, TypeScript, TailwindCSS 3                   |
+| CDN           | CloudFront (OAC), Route 53, ACM                               |
+| API           | API Gateway (REST, Regional), WAF                             |
+| API Lambda    | Python 3.14, boto3                                            |
+| Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3                     |
+| Queue         | SQS Standard, Dead Letter Queue                               |
+| Database      | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL) |
+| Storage       | S3 buckets for frontend, uploads, and compressed output       |
+| IaC           | Terraform 1.x, AWS Provider 6.39                              |
+| CI/CD         | GitHub Actions with OIDC                                      |
+| Observability | CloudWatch logs, X-Ray tracing                                |
 
 ## Repository Structure
 
@@ -118,24 +118,24 @@ image_compressor/
 
 ### Implemented Modules
 
-| Module | Description | Key Resources |
-| --- | --- | --- |
-| `S3_buckets` | Frontend, uploads, and processed buckets with encryption/versioning/CORS | `aws_s3_bucket`, versioning, SSE, CORS, upload notifications |
-| `cdn` | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
-| `acm` | DNS-validated certificate for root and wildcard domain | `aws_acm_certificate`, validation records |
-| `route 53` | Alias routing from subdomain to CloudFront | Route53 record set |
-| `dynamodb` | Job and batch metadata table with GSI and TTL | `aws_dynamodb_table` |
-| `api gateway` | REST resources, methods, integrations, deployment and stage | API Gateway resources/methods/integrations/stage |
-| `iam` | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy | IAM roles, policies, attachments |
-| `lambda` | API Lambda and worker Lambda packaging/deployment | `aws_lambda_function`, event source mapping, layer association |
-| `sqs` | Main queue, DLQ, redrive policies, and S3 send-message policy | `aws_sqs_queue`, queue policy, redrive policy |
+| Module        | Description                                                              | Key Resources                                                         |
+| ------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `S3_buckets`  | Frontend, uploads, and processed buckets with encryption/versioning/CORS | `aws_s3_bucket`, versioning, SSE, CORS, upload notifications          |
+| `cdn`         | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior    | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
+| `acm`         | DNS-validated certificate for root and wildcard domain                   | `aws_acm_certificate`, validation records                             |
+| `route 53`    | Alias routing from subdomain to CloudFront                               | Route53 record set                                                    |
+| `dynamodb`    | Job and batch metadata table with GSI and TTL                            | `aws_dynamodb_table`                                                  |
+| `api gateway` | REST resources, methods, integrations, deployment and stage              | API Gateway resources/methods/integrations/stage                      |
+| `iam`         | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy | IAM roles, policies, attachments                                      |
+| `lambda`      | API Lambda and worker Lambda packaging/deployment                        | `aws_lambda_function`, event source mapping, layer association        |
+| `sqs`         | Main queue, DLQ, redrive policies, and S3 send-message policy            | `aws_sqs_queue`, queue policy, redrive policy                         |
 
 ### Partially Implemented / Pending
 
-| Module | Current State | What Remains |
-| --- | --- | --- |
+| Module    | Current State               | What Remains                                                      |
+| --------- | --------------------------- | ----------------------------------------------------------------- |
 | `storage` | Scaffolded module directory | Lifecycle retention policy module if extracted from bucket module |
-| `vpc` | Implemented module code | Enable in root when private networking is required |
+| `vpc`     | Implemented module code     | Enable in root when private networking is required                |
 
 ### Root Composition Notes
 
@@ -146,14 +146,15 @@ image_compressor/
 
 ## API Endpoints
 
-| Method | Endpoint | Description |
-| --- | --- | --- |
-| `POST` | `/upload-url` | Creates a batch and jobs; returns presigned upload URLs |
-| `GET` | `/jobs/{jobId}` | Returns one job status |
-| `GET` | `/batches/{batchId}` | Returns aggregate batch status |
-| `GET` | `/batches/{batchId}/download` | Returns single file or zip download URL |
+| Method | Endpoint                      | Description                                             |
+| ------ | ----------------------------- | ------------------------------------------------------- |
+| `POST` | `/upload-url`                 | Creates a batch and jobs; returns presigned upload URLs |
+| `GET`  | `/jobs/{jobId}`               | Returns one job status                                  |
+| `GET`  | `/batches/{batchId}`          | Returns aggregate batch status                          |
+| `GET`  | `/batches/{batchId}/download` | Returns single file or zip download URL                 |
 
 Notes:
+
 - API integrations use `AWS_PROXY`.
 - CORS preflight `OPTIONS` routes use `MOCK` integrations.
 
@@ -168,6 +169,7 @@ Notes:
 7. On completion, client requests `GET /batches/{batchId}/download`.
 
 Worker configuration:
+
 - SQS batch size: 10
 - Batching window: 2 seconds
 - Lambda timeout: 120 seconds
@@ -180,12 +182,14 @@ Worker configuration:
 Frontend is implemented in `apps/web` as a React single-page app.
 
 Implemented features:
+
 - Presigned upload flow integration with API and S3.
 - Batch/job polling and progress visualization.
 - Compression options exposed to user (`format`, `quality`, `max_width`).
 - Download flow for single-image and multi-image outputs.
 
 Pending frontend work:
+
 - Authentication flow.
 - Full responsive pass.
 - Error-state UX and recovery paths.
@@ -193,10 +197,12 @@ Pending frontend work:
 ## DevOps and CI/CD
 
 Target pipeline:
+
 - Pull request: lint, tests, security scans, infra checks, and Terraform plan.
 - Main branch: OIDC auth, Terraform apply, frontend deploy, Lambda updates.
 
 Planned tooling:
+
 - `pre-commit` for `black`, `ruff`, and Terraform checks.
 - Trivy and tfsec in CI.
 - Infracost and deployment safety checks.
@@ -204,12 +210,14 @@ Planned tooling:
 ## Security
 
 Implemented:
+
 - Private S3 buckets with server-side encryption.
 - CloudFront OAC with signed origin requests.
 - IAM least-privilege roles for API and worker Lambda functions.
 - Presigned upload/download architecture (no image payload through API Gateway).
 
 Planned hardening:
+
 - WAF policy refinement.
 - API Gateway throttling and usage controls.
 - Tightened CORS origins for production domains.
@@ -286,31 +294,31 @@ bun run dev
 
 ### Terraform Inputs (selected)
 
-| Variable | Default |
-| --- | --- |
-| `aws_region` | `us-east-1` |
-| `frontend_bucket_name` | `image-compression-frontend-bucket` |
-| `uploads_bucket_name` | `image-compression-uploads-bucket` |
-| `processed_bucket_name` | `image-compression-processed-bucket` |
-| `table_name` | `imageCompressionMetadata` |
-| `message_retention_seconds` | `10800` |
-| `maxReceiveCount` | `3` |
+| Variable                    | Default                              |
+| --------------------------- | ------------------------------------ |
+| `aws_region`                | `us-east-1`                          |
+| `frontend_bucket_name`      | `image-compression-frontend-bucket`  |
+| `uploads_bucket_name`       | `image-compression-uploads-bucket`   |
+| `processed_bucket_name`     | `image-compression-processed-bucket` |
+| `table_name`                | `imageCompressionMetadata`           |
+| `message_retention_seconds` | `10800`                              |
+| `maxReceiveCount`           | `3`                                  |
 
 ### API Lambda Environment
 
-| Variable | Purpose |
-| --- | --- |
-| `DYNAMODB_TABLE` | DynamoDB table for jobs and batches |
-| `UPLOADS_BUCKET` | Upload bucket for presigned PUT URLs |
+| Variable            | Purpose                                   |
+| ------------------- | ----------------------------------------- |
+| `DYNAMODB_TABLE`    | DynamoDB table for jobs and batches       |
+| `UPLOADS_BUCKET`    | Upload bucket for presigned PUT URLs      |
 | `COMPRESSED_BUCKET` | Output bucket for presigned download URLs |
-| `PRESIGNED_URL_TTL` | Presigned URL expiration in seconds |
-| `DDB_TTL_SECONDS` | Optional TTL horizon override for records |
+| `PRESIGNED_URL_TTL` | Presigned URL expiration in seconds       |
+| `DDB_TTL_SECONDS`   | Optional TTL horizon override for records |
 
 ### Worker Lambda Environment
 
-| Variable | Purpose |
-| --- | --- |
-| `DYNAMODB_TABLE` | DynamoDB table for job and batch updates |
-| `COMPRESSED_BUCKET` | Destination bucket for compressed files |
-| `DEFAULT_OUTPUT_FORMAT` | Fallback output format (`WEBP`) |
-| `DEFAULT_QUALITY` | Fallback quality setting (`80`) |
+| Variable                | Purpose                                  |
+| ----------------------- | ---------------------------------------- |
+| `DYNAMODB_TABLE`        | DynamoDB table for job and batch updates |
+| `COMPRESSED_BUCKET`     | Destination bucket for compressed files  |
+| `DEFAULT_OUTPUT_FORMAT` | Fallback output format (`WEBP`)          |
+| `DEFAULT_QUALITY`       | Fallback quality setting (`80`)          |
