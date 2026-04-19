@@ -22,6 +22,7 @@ resource "aws_lambda_function" "apigw_lambda" {
       PRESIGNED_URL_TTL = "900"
       MAX_FILE_SIZE_BYTES  = "10485760"
       MAX_BATCH_SIZE_BYTES = "31457280"
+      MAX_BATCH_FILES      = "5"
     }
   }
 }

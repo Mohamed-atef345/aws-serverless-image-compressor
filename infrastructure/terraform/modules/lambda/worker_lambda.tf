@@ -1,7 +1,7 @@
 resource "aws_lambda_event_source_mapping" "worker_lambda_event_source_mapping" {
   event_source_arn                   = var.image_uploads_queue_arn
   function_name                      = aws_lambda_function.worker_lambda.arn
-  batch_size                         = 10
+  batch_size                         = 5
   maximum_batching_window_in_seconds = 2
   function_response_types            = ["ReportBatchItemFailures"]
   enabled                            = true

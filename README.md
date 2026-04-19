@@ -31,10 +31,10 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
                              ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                 API LAYER                                   │
-│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐ │
-│  │     WAF     │──▶│ API Gateway  │──▶│        Lambda (API)             │ │
-│  │             │    │   REST API   │    │   codes/apigw_lambda/handler.py │ │
-│  └─────────────┘    └──────────────┘    └─────────────────────────────────┘ │
+│  ┌──────────────┐    ┌─────────────────────────────────┐                    │
+│  │ API Gateway  │──▶│        Lambda (API)             │                    │
+│  │   REST API   │    │   codes/apigw_lambda/handler.py │                    │
+│  └──────────────┘    └─────────────────────────────────┘                    │
 └────────────────────────────┬────────────────────────────────────────────────┘
                              │
                              ▼
@@ -69,15 +69,15 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 | ------------- | ------------------------------------------------------------- |
 | Frontend      | React 19, Vite 6, TypeScript, TailwindCSS 3                   |
 | CDN           | CloudFront (OAC), Route 53, ACM                               |
-| API           | API Gateway (REST, Regional), WAF                             |
+| API           | API Gateway (REST, Regional)                                  |
 | API Lambda    | Python 3.14, boto3                                            |
 | Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3                     |
 | Queue         | SQS Standard, Dead Letter Queue                               |
 | Database      | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL) |
 | Storage       | S3 buckets for frontend, uploads, and compressed output       |
 | IaC           | Terraform 1.x, AWS Provider 6.39                              |
-| CI/CD         | GitHub Actions with OIDC                                      |
-| Observability | CloudWatch logs, X-Ray tracing                                |
+| CI/CD         | Manual/local deployment flow (GitHub Actions planned)         |
+| Observability | CloudWatch logs (worker IAM includes X-Ray permissions)       |
 
 ## Repository Structure
 
@@ -128,17 +128,17 @@ image_compressor/
 
 ### Partially Implemented / Pending
 
-| Module    | Current State               | What Remains                                                      |
-| --------- | --------------------------- | ----------------------------------------------------------------- |
-| `storage` | Scaffolded module directory | Lifecycle retention policy module if extracted from bucket module |
-| `vpc`     | Implemented module code     | Enable in root when private networking is required                |
+| Module | Current State           | What Remains                                       |
+| ------ | ----------------------- | -------------------------------------------------- |
+| `vpc`  | Implemented module code | Enable in root when private networking is required |
 
 ### Root Composition Notes
 
 - Active modules in root `infrastructure/terraform/main.tf`: `dynamodb`, `s3_buckets`, `cdn`, `route53`, `acm`, `iam`, `api_gateway`, `lambda`, `sqs`.
 - API Gateway invoke permissions are wired via `aws_lambda_permission` in root.
-- Worker Lambda consumes SQS with `batch_size = 10`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
+- Worker Lambda consumes SQS with `batch_size = 5`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
 - VPC module remains disabled in root for current deployment mode.
+- Terraform remote state is configured with an S3 backend and lockfile (`use_lockfile = true`).
 
 ## API Endpoints
 
@@ -167,10 +167,11 @@ Notes:
 
 Worker configuration:
 
-- SQS batch size: 10
+- SQS batch size: 5
 - Batching window: 2 seconds
 - Lambda timeout: 120 seconds
-- SQS visibility timeout: 900 seconds
+- Worker Lambda memory: 512 MB
+- SQS visibility timeout: 120 seconds
 - Max receive count: 3 (to DLQ)
 - Partial batch response: enabled via `ReportBatchItemFailures`
 
@@ -195,16 +196,27 @@ Pending frontend work:
 
 ## DevOps and CI/CD
 
-Target pipeline:
+Implemented DevOps features:
 
-- Pull request: lint, tests, security scans, infra checks, and Terraform plan.
-- Main branch: OIDC auth, Terraform apply, frontend deploy, Lambda updates.
+- **Terraform architecture**: modular IaC in `infrastructure/terraform/modules` for `S3_buckets`, `cdn`, `acm`, `route 53`, `dynamodb`, `api gateway`, `iam`, `lambda`, and `sqs`.
+- **State management**: remote Terraform state via S3 backend with lockfile locking enabled (`use_lockfile = true`).
+- **Edge + DNS delivery**: CloudFront distribution with OAC, ACM certificate validation, and Route53 alias record to `compression.<domain>`.
+- **Storage setup**: dedicated frontend/uploads/processed S3 buckets with SSE (`AES256`), CORS rules for upload/download flows, and S3 event notifications from uploads bucket to SQS.
+- **Async processing pipeline**: SQS main queue + DLQ + redrive policy, then worker Lambda event source mapping with `batch_size = 5`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
+- **Lambda packaging/runtime**: API and worker functions are packaged with Terraform `archive_file`; worker uses a Pillow Lambda layer zip and runs with `python3.14`, `120s` timeout, and `512 MB` memory.
+- **IAM least privilege**: separate API/worker Lambda roles with scoped S3, DynamoDB, SQS, and CloudWatch Logs permissions; worker role also includes X-Ray publish permissions.
+- **API deployment plumbing**: API Gateway REST resources/methods/integrations/stage are provisioned in Terraform with Lambda invoke permissions from API Gateway.
 
-Planned tooling:
+Current delivery workflow:
 
-- `pre-commit` for `black`, `ruff`, and Terraform checks.
-- Trivy and tfsec in CI.
-- Infracost and deployment safety checks.
+- Deployments are currently run manually via Terraform CLI (`init/plan/apply`) and local frontend build/deploy steps.
+- Pillow layer build is currently a local Docker-driven step before Terraform apply.
+- `.github/workflows` is not present yet in this repository.
+
+Planned CI/CD:
+
+- PR pipeline target: lint/tests/security/infra checks and `terraform plan`.
+- Merge pipeline target: OIDC auth, `terraform apply`, frontend sync, CloudFront invalidation, Lambda updates.
 
 ## Security
 
@@ -230,6 +242,8 @@ Planned hardening:
 - Worker Lambda module wiring (runtime, environment variables, SQS event source mapping).
 - Worker Lambda handler implementation in `codes/worker_lambda/handler.py`.
 - Worker IAM role/policy wiring.
+- CloudFront + ACM + Route53 infrastructure wiring for frontend delivery.
+- Terraform remote state backend configuration with locking.
 - Core frontend upload and processing UX.
 
 ### In Progress
@@ -285,8 +299,8 @@ terraform apply
 
 ```bash
 cd apps/web
-bun install
-bun run dev
+npm install
+npm run dev
 ```
 
 ## Environment Variables
@@ -305,16 +319,22 @@ bun run dev
 
 ### API Lambda Environment
 
-| Variable               | Purpose                                             |
-| ---------------------- | --------------------------------------------------- |
-| `DYNAMODB_TABLE`       | DynamoDB table for jobs and batches                 |
-| `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                |
-| `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs           |
-| `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                 |
-| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records           |
-| `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB) |
-| `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (30 MB)    |
-| `MAX_BATCH_FILES`      | Max allowed number of files per batch (default 5)    |
+| Variable               | Purpose                                                       |
+| ---------------------- | ------------------------------------------------------------- |
+| `DYNAMODB_TABLE`       | DynamoDB table for jobs and batches                           |
+| `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                          |
+| `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs                     |
+| `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                           |
+| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records                     |
+| `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB)         |
+| `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (default 30 MB)    |
+| `MAX_BATCH_FILES`      | Max files per batch (configured as `5`)                       |
+
+### Frontend Environment
+
+| Variable            | Purpose                                      |
+| ------------------- | -------------------------------------------- |
+| `VITE_API_BASE_URL` | Base URL for API requests from the web app. |
 
 ### Worker Lambda Environment
 
