@@ -23,7 +23,7 @@ data "aws_iam_policy_document" "s3_sqs_policy" {
 
 resource "aws_sqs_queue" "image_uploads_queue" {
   name                       = "image_uploads_queue"
-  visibility_timeout_seconds = 900
+  visibility_timeout_seconds = 120
   message_retention_seconds  = var.message_retention_seconds
 }
 

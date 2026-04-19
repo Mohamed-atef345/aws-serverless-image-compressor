@@ -8,6 +8,7 @@ import os
 from datetime import datetime, timezone
 from io import BytesIO
 from urllib.parse import unquote_plus
+from pathlib import PurePosixPath
 
 from PIL import Image, ImageOps
 import boto3
@@ -230,6 +231,14 @@ def _extension_for_format(output_format: str) -> str:
     return "webp"
 
 
+def _compressed_filename(original_filename: str, output_format: str) -> str:
+    safe_name = PurePosixPath(original_filename).name
+    stem = safe_name.rsplit(".", 1)[0] if "." in safe_name else safe_name
+    if not stem:
+        stem = "image"
+    return f"{stem}_compressed.{_extension_for_format(output_format)}"
+
+
 def _mark_job_processing(job_id: str) -> None:
     try:
         table.update_item(
@@ -385,6 +394,7 @@ def _upload_compressed_object(
     compressed_bytes: bytes,
     compressed_key: str,
     output_format: str,
+    download_filename: str,
 ) -> None:
     try:
         s3_client.put_object(
@@ -392,6 +402,7 @@ def _upload_compressed_object(
             Key=compressed_key,
             Body=compressed_bytes,
             ContentType=_content_type_for_format(output_format),
+            ContentDisposition=f'attachment; filename="{download_filename}"',
         )
     except ClientError as exc:
         raise RetryableWorkerError(f"Failed to store compressed image: {exc.response['Error']['Message']}") from exc
@@ -431,9 +442,14 @@ def _process_uploaded_object(bucket: str, object_key: str) -> None:
         )
         return
 
-    extension = _extension_for_format(output_format)
-    compressed_key = f"{batch_id}/{job_id}/compressed.{extension}"
-    _upload_compressed_object(compressed_bytes, compressed_key, output_format)
+    compressed_name = _compressed_filename(filename, output_format)
+    compressed_key = f"{batch_id}/{job_id}/{compressed_name}"
+    _upload_compressed_object(
+        compressed_bytes=compressed_bytes,
+        compressed_key=compressed_key,
+        output_format=output_format,
+        download_filename=compressed_name,
+    )
 
     job_updated = _mark_job_completed(
         job_id=job_id,

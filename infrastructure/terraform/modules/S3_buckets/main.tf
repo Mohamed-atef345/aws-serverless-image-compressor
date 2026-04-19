@@ -5,6 +5,7 @@ data "aws_caller_identity" "current" {}
 resource "aws_s3_bucket" "frontend_bucket" {
   bucket           = format("%s-%s-%s-an", var.frontend_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
   bucket_namespace = "account-regional"
+  force_destroy = true  # to allow terraform destroy without manually empty the bucket (for easy deatruction)
 }
 
 resource "aws_s3_bucket_versioning" "frontend_bucket_versioning" {
@@ -29,6 +30,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "frontend_bucket_s
 resource "aws_s3_bucket" "uploads_bucket" {
   bucket           = format("%s-%s-%s-an", var.uploads_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
   bucket_namespace = "account-regional"
+  force_destroy = true  # to allow terraform destroy without manually empty the bucket (for easy deatruction)
 }
 
 resource "aws_s3_bucket_versioning" "uploads_bucket_versioning" {
@@ -74,6 +76,7 @@ resource "aws_s3_bucket_notification" "uploads_bucket_notification" {
 resource "aws_s3_bucket" "processed_bucket" {
   bucket           = format("%s-%s-%s-an", var.processed_bucket_name, data.aws_caller_identity.current.account_id, var.aws_region)
   bucket_namespace = "account-regional"
+  force_destroy = true  # to allow terraform destroy without manually empty the bucket (for easy deatruction)
 }
 
 resource "aws_s3_bucket_versioning" "processed_bucket_versioning" {

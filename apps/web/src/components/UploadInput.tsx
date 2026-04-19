@@ -11,6 +11,35 @@ import {
   type CreateBatchResponse,
 } from "../api";
 
+function inferDownloadFilename(downloadUrl: string, fallback: string): string {
+  try {
+    const url = new URL(downloadUrl);
+    const key = url.searchParams.get("response-content-disposition");
+    if (key) {
+      const match = key.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      const encoded = match?.[1] ?? match?.[2];
+      if (encoded) {
+        return decodeURIComponent(encoded);
+      }
+    }
+    const pathName = url.pathname.split("/").pop();
+    if (pathName) return decodeURIComponent(pathName);
+  } catch {
+    // Fall through to fallback
+  }
+  return fallback;
+}
+
+function triggerBrowserDownload(downloadUrl: string, fallbackName: string): void {
+  const anchor = document.createElement("a");
+  anchor.href = downloadUrl;
+  anchor.download = inferDownloadFilename(downloadUrl, fallbackName);
+  anchor.rel = "noopener";
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
 // ──────────────────────────── helpers ────────────────────────────────────────
 
 const FORMAT_OPTIONS = [
@@ -36,6 +65,9 @@ const MAX_WIDTH_OPTIONS = [
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
 const MAX_FILES = 20;
 const MAX_FILE_MB = 20;
+const MAX_BATCH_MB = 30;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+const MAX_BATCH_BYTES = MAX_BATCH_MB * 1024 * 1024;
 
 function prettySize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -65,26 +97,69 @@ export const UploadInput: React.FC = () => {
   const [phase, setPhase] = useState<AppPhase>("idle");
   const [uploadProgress, setUploadProgress] = useState(0);
   const [errorMessage, setErrorMessage] = useState("");
+  const [validationMessage, setValidationMessage] = useState("");
   const [batchResponse, setBatchResponse] =
     useState<CreateBatchResponse | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
+  const [downloadType, setDownloadType] = useState<"single" | "zip">("zip");
 
   // ── File validation ───────────────────────────────────────────────────────
 
   const addFiles = useCallback((incoming: File[]) => {
-    const valid = incoming.filter((f) => {
-      if (!ACCEPTED_TYPES.includes(f.type)) return false;
-      if (f.size > MAX_FILE_MB * 1024 * 1024) return false;
-      return true;
-    });
     setFiles((prev) => {
-      const merged = [...prev, ...valid];
-      return merged.slice(0, MAX_FILES);
+      const next = [...prev];
+      let totalBytes = prev.reduce((acc, file) => acc + file.size, 0);
+
+      let skippedType = 0;
+      let skippedSingleSize = 0;
+      let skippedBatchSize = 0;
+      let skippedCount = 0;
+
+      for (const file of incoming) {
+        if (!ACCEPTED_TYPES.includes(file.type)) {
+          skippedType += 1;
+          continue;
+        }
+        if (file.size > MAX_FILE_BYTES) {
+          skippedSingleSize += 1;
+          continue;
+        }
+        if (next.length >= MAX_FILES) {
+          skippedCount += 1;
+          continue;
+        }
+        if (totalBytes + file.size > MAX_BATCH_BYTES) {
+          skippedBatchSize += 1;
+          continue;
+        }
+
+        next.push(file);
+        totalBytes += file.size;
+      }
+
+      const messages: string[] = [];
+      if (skippedType > 0) {
+        messages.push(`${skippedType} unsupported file type`);
+      }
+      if (skippedSingleSize > 0) {
+        messages.push(`${skippedSingleSize} file(s) exceed ${MAX_FILE_MB} MB each`);
+      }
+      if (skippedBatchSize > 0) {
+        messages.push(`total batch limit is ${MAX_BATCH_MB} MB`);
+      }
+      if (skippedCount > 0) {
+        messages.push(`maximum ${MAX_FILES} files allowed`);
+      }
+      setValidationMessage(messages.join(" • "));
+
+      return next;
     });
   }, []);
 
-  const removeFile = (idx: number) =>
+  const removeFile = (idx: number) => {
     setFiles((prev) => prev.filter((_, i) => i !== idx));
+    setValidationMessage("");
+  };
 
   // ── Drag & drop ───────────────────────────────────────────────────────────
 
@@ -104,9 +179,22 @@ export const UploadInput: React.FC = () => {
   const handleCompress = async () => {
     if (files.length === 0) return;
 
+    const totalSelectedBytes = files.reduce((acc, file) => acc + file.size, 0);
+    if (totalSelectedBytes > MAX_BATCH_BYTES) {
+      setErrorMessage(`Total selected files exceed ${MAX_BATCH_MB} MB.`);
+      setPhase("error");
+      return;
+    }
+    if (files.some((file) => file.size > MAX_FILE_BYTES)) {
+      setErrorMessage(`Each file must be ${MAX_FILE_MB} MB or less.`);
+      setPhase("error");
+      return;
+    }
+
     try {
       setPhase("uploading");
       setUploadProgress(0);
+      setValidationMessage("");
 
       const settings: UploadSettings = {
         quality: parseInt(quality, 10),
@@ -164,6 +252,7 @@ export const UploadInput: React.FC = () => {
     try {
       const dl = await getBatchDownload(batchId);
       setDownloadUrl(dl.download_url);
+      setDownloadType(dl.type);
       setPhase("done");
     } catch (err) {
       setErrorMessage((err as Error).message);
@@ -180,9 +269,18 @@ export const UploadInput: React.FC = () => {
     setFiles([]);
     setPhase("idle");
     setErrorMessage("");
+    setValidationMessage("");
     setBatchResponse(null);
     setDownloadUrl("");
+    setDownloadType("zip");
     setUploadProgress(0);
+  };
+
+  const handleDownloadClick = () => {
+    if (!downloadUrl) return;
+    const fallback =
+      downloadType === "zip" ? "compressed_images.zip" : "compressed_image";
+    triggerBrowserDownload(downloadUrl, fallback);
   };
 
   // ── Render helpers ────────────────────────────────────────────────────────
@@ -213,14 +311,14 @@ export const UploadInput: React.FC = () => {
             Your compressed images are ready to download.
           </p>
         </div>
-        <a
-          href={downloadUrl}
+        <button
+          type="button"
           id="download-button"
-          download
+          onClick={handleDownloadClick}
           className="px-8 py-3 rounded-xl bg-gradient-to-r from-yellow-400 to-yellow-600 text-black font-schibsted font-semibold text-base shadow-[0_0_15px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] transition-all"
         >
           Download Images
-        </a>
+        </button>
         <button
           onClick={reset}
           className="text-sm text-gray-500 hover:text-gray-300 transition-colors"
@@ -330,8 +428,7 @@ export const UploadInput: React.FC = () => {
                   </span>
                 </p>
                 <p className="text-gray-500 text-xs mt-1">
-                  JPEG, PNG, WebP, GIF · max {MAX_FILE_MB} MB · up to{" "}
-                  {MAX_FILES} files
+                  JPEG, PNG, WebP, GIF · max {MAX_FILE_MB} MB/file · {MAX_BATCH_MB} MB total · up to {MAX_FILES} files
                 </p>
               </div>
             </>
@@ -443,7 +540,7 @@ export const UploadInput: React.FC = () => {
           <div className="text-xs text-gray-500 font-schibsted">
             {files.length === 0
               ? "No files selected"
-              : `${files.length} image${files.length !== 1 ? "s" : ""} · ${prettySize(files.reduce((a, f) => a + f.size, 0))}`}
+              : `${files.length} image${files.length !== 1 ? "s" : ""} · ${prettySize(files.reduce((a, f) => a + f.size, 0))} / ${MAX_BATCH_MB} MB`}
           </div>
 
           {phase === "uploading" ? (
@@ -478,6 +575,9 @@ export const UploadInput: React.FC = () => {
           )}
         </div>
       </div>
+      {validationMessage && (
+        <p className="mt-3 text-xs text-red-400 font-schibsted">{validationMessage}</p>
+      )}
     </DropdownContext.Provider>
   );
 };

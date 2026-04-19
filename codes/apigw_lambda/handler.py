@@ -20,6 +20,7 @@ import uuid
 import zipfile
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
+from pathlib import PurePosixPath
 from typing import Any
 
 import boto3
@@ -294,9 +295,14 @@ def _handle_batch_download(batch_id: str) -> dict[str, Any]:
     # Single image → direct presigned URL
     if len(completed_jobs) == 1:
         s3_key: str = completed_jobs[0]["s3_compressed_key"]
+        download_name = PurePosixPath(s3_key).name
         url: str = s3_client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": COMPRESSED_BUCKET, "Key": s3_key},
+            Params={
+                "Bucket": COMPRESSED_BUCKET,
+                "Key": s3_key,
+                "ResponseContentDisposition": f'attachment; filename="{download_name}"',
+            },
             ExpiresIn=PRESIGNED_URL_TTL,
         )
         return _ok({"download_url": url, "type": "single"})
@@ -306,7 +312,7 @@ def _handle_batch_download(batch_id: str) -> dict[str, Any]:
     with zipfile.ZipFile(zip_buffer, mode="w", compression=zipfile.ZIP_STORED) as zf:
         for job in completed_jobs:
             s3_key = job["s3_compressed_key"]
-            filename: str = job.get("filename", s3_key.split("/")[-1])
+            filename: str = PurePosixPath(s3_key).name
             try:
                 obj = s3_client.get_object(Bucket=COMPRESSED_BUCKET, Key=s3_key)
                 zf.writestr(filename, obj["Body"].read())
@@ -324,7 +330,11 @@ def _handle_batch_download(batch_id: str) -> dict[str, Any]:
 
     zip_url: str = s3_client.generate_presigned_url(
         "get_object",
-        Params={"Bucket": COMPRESSED_BUCKET, "Key": zip_key},
+        Params={
+            "Bucket": COMPRESSED_BUCKET,
+            "Key": zip_key,
+            "ResponseContentDisposition": f'attachment; filename="compressed_images_{batch_id}.zip"',
+        },
         ExpiresIn=PRESIGNED_URL_TTL,
     )
     logger.info("Created ZIP for batch %s with %d images", batch_id, len(completed_jobs))

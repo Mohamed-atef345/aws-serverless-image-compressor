@@ -46,6 +46,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
 }) => {
   const [batch, setBatch] = useState<BatchStatusResponse | null>(null);
   const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatusResponse>>({});
+  const [lastKnownStatuses, setLastKnownStatuses] = useState<Record<string, JobStatusResponse["status"]>>({});
   const [logLines, setLogLines] = useState<string[]>(['Initialising batch…']);
   const logRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -86,6 +87,38 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
           })
         );
         setJobStatuses((prev) => ({ ...prev, ...updates }));
+
+        const statusFromBatch = (() => {
+          if (!batchData) return null;
+          if (batchData.status === "COMPLETED") return "COMPLETED" as const;
+          if (batchData.status === "FAILED") return null;
+          if ((batchData.completed_jobs ?? 0) > 0 || (batchData.failed_jobs ?? 0) > 0) {
+            return "PROCESSING" as const;
+          }
+          return null;
+        })();
+
+        setLastKnownStatuses((prev) => {
+          const next = {...prev};
+          for (const job of jobs) {
+            const reported = updates[job.job_id]?.status;
+            if (reported) {
+              if (next[job.job_id] !== "COMPLETED" && next[job.job_id] !== "FAILED") {
+                next[job.job_id] = reported;
+              }
+              continue;
+            }
+
+            if (
+              statusFromBatch &&
+              next[job.job_id] !== "COMPLETED" &&
+              next[job.job_id] !== "FAILED"
+            ) {
+              next[job.job_id] = statusFromBatch;
+            }
+          }
+          return next;
+        });
 
         if (batchData.status === 'COMPLETED' || batchData.status === 'FAILED') {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -159,7 +192,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
           {/* Per-job status list */}
           <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1 scrollbar-thin">
             {jobs.map((j) => {
-              const status = jobStatuses[j.job_id]?.status ?? 'PENDING';
+              const status = jobStatuses[j.job_id]?.status ?? lastKnownStatuses[j.job_id] ?? 'PENDING';
               return (
                   <div
                   key={j.job_id}
