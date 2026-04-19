@@ -70,7 +70,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
     return () => { if (logTimerRef.current) clearInterval(logTimerRef.current); };
   }, []);
 
-  // Poll batch + jobs every 2.5 s
+  // Poll batch + jobs every 1 s
   useEffect(() => {
     const poll = async () => {
       try {
@@ -137,7 +137,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
     };
 
     poll();
-    pollRef.current = setInterval(poll, 2500);
+    pollRef.current = setInterval(poll, 1000);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
   }, [batchId, jobs, getBatchStatus, getJobStatus, onComplete, onError]);
 

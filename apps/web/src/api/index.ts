@@ -5,6 +5,7 @@ type HttpMethod = "GET" | "POST" | "PUT";
 export interface UploadFileDescriptor {
   filename: string;
   content_type: string;
+  size_bytes: number;
 }
 
 export interface UploadSettings {

@@ -43,6 +43,9 @@ UPLOADS_BUCKET: str = os.environ["UPLOADS_BUCKET"]
 COMPRESSED_BUCKET: str = os.environ["COMPRESSED_BUCKET"]
 PRESIGNED_URL_TTL: int = int(os.environ.get("PRESIGNED_URL_TTL", "900"))
 DDB_TTL_SECONDS: int = int(os.environ.get("DDB_TTL_SECONDS", "604800"))
+MAX_FILE_SIZE_BYTES: int = int(os.environ.get("MAX_FILE_SIZE_BYTES", str(10 * 1024 * 1024)))
+MAX_BATCH_SIZE_BYTES: int = int(os.environ.get("MAX_BATCH_SIZE_BYTES", str(30 * 1024 * 1024)))
+MAX_BATCH_FILES: int = int(os.environ.get("MAX_BATCH_FILES", "5"))
 
 # ---------------------------------------------------------------------------
 # AWS clients (module-level for Lambda container reuse)
@@ -98,14 +101,35 @@ def _handle_upload_url(body: dict[str, Any]) -> dict[str, Any]:
       "jobs": [{"job_id": "...", "upload_url": "...", "filename": "..."}, ...]
     }
     """
-    files: list[dict[str, str]] = body.get("files", [])
+    files: list[dict[str, Any]] = body.get("files", [])
     settings: dict[str, Any] = body.get("settings", {})
 
     if not files:
         return _error("'files' list is required and must not be empty.")
 
-    if len(files) > 50:
-        return _error("Maximum 50 files per batch.")
+    if len(files) > MAX_BATCH_FILES:
+        return _error(f"Maximum {MAX_BATCH_FILES} files per batch.")
+
+    total_size_bytes = 0
+    for file_info in files:
+        file_size = file_info.get("size_bytes")
+        if not isinstance(file_size, int) or file_size < 0:
+            return _error("Each file must include a valid non-negative 'size_bytes' value.")
+
+        if file_size > MAX_FILE_SIZE_BYTES:
+            return _error(
+                f"File '{file_info.get('filename', 'unknown')}' exceeds the maximum allowed size of "
+                f"{MAX_FILE_SIZE_BYTES // (1024 * 1024)} MB.",
+                413,
+            )
+
+        total_size_bytes += file_size
+
+    if total_size_bytes > MAX_BATCH_SIZE_BYTES:
+        return _error(
+            f"Total batch size exceeds the maximum allowed {MAX_BATCH_SIZE_BYTES // (1024 * 1024)} MB.",
+            413,
+        )
 
     batch_id: str = str(uuid.uuid4())
     now_dt = datetime.now(timezone.utc)

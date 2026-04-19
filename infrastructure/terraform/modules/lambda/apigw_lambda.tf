@@ -20,7 +20,8 @@ resource "aws_lambda_function" "apigw_lambda" {
       UPLOADS_BUCKET    = var.uploads_bucket_name
       COMPRESSED_BUCKET = var.compressed_bucket_name
       PRESIGNED_URL_TTL = "900"
+      MAX_FILE_SIZE_BYTES  = "10485760"
+      MAX_BATCH_SIZE_BYTES = "31457280"
     }
   }
 }
-

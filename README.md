@@ -153,6 +153,7 @@ Notes:
 
 - API integrations use `AWS_PROXY`.
 - CORS preflight `OPTIONS` routes use `MOCK` integrations.
+- Upload guardrails: max `5` files per batch, max `10 MB` per file, and max `30 MB` total batch size.
 
 ## Processing Flow
 
@@ -160,7 +161,7 @@ Notes:
 2. API Lambda creates DynamoDB records and returns presigned S3 upload URLs.
 3. Client uploads directly to S3 uploads bucket.
 4. S3 `ObjectCreated` event is sent to SQS.
-5. Worker Lambda reads SQS records, fetches source objects from S3, compresses/transcodes images, writes output to processed bucket, and updates DynamoDB job/batch state.
+5. Worker Lambda reads SQS records, fetches source objects from S3, compresses/transcodes images, writes output to processed bucket using `<original_name>_compressed.<ext>` naming, and updates DynamoDB job/batch state.
 6. Client polls `GET /batches/{batchId}` and optionally `GET /jobs/{jobId}`.
 7. On completion, client requests `GET /batches/{batchId}/download`.
 
@@ -182,7 +183,9 @@ Implemented features:
 - Presigned upload flow integration with API and S3.
 - Batch/job polling and progress visualization.
 - Compression options exposed to user (`format`, `quality`, `max_width`).
-- Download flow for single-image and multi-image outputs.
+- Upload validation guardrails in the client (max `5` files, `10 MB` per file, `30 MB` batch total).
+- Premium settings panel redesign for format, quality, and max-width controls with explanatory labels.
+- Download flow for single-image and multi-image outputs, including forced browser download behavior.
 
 Pending frontend work:
 
@@ -302,13 +305,16 @@ bun run dev
 
 ### API Lambda Environment
 
-| Variable            | Purpose                                   |
-| ------------------- | ----------------------------------------- |
-| `DYNAMODB_TABLE`    | DynamoDB table for jobs and batches       |
-| `UPLOADS_BUCKET`    | Upload bucket for presigned PUT URLs      |
-| `COMPRESSED_BUCKET` | Output bucket for presigned download URLs |
-| `PRESIGNED_URL_TTL` | Presigned URL expiration in seconds       |
-| `DDB_TTL_SECONDS`   | Optional TTL horizon override for records |
+| Variable               | Purpose                                             |
+| ---------------------- | --------------------------------------------------- |
+| `DYNAMODB_TABLE`       | DynamoDB table for jobs and batches                 |
+| `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                |
+| `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs           |
+| `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                 |
+| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records           |
+| `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB) |
+| `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (30 MB)    |
+| `MAX_BATCH_FILES`      | Max allowed number of files per batch (default 5)    |
 
 ### Worker Lambda Environment
 

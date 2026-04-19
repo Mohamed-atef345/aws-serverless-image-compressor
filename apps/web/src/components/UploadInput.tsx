@@ -63,8 +63,8 @@ const MAX_WIDTH_OPTIONS = [
 ];
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-const MAX_FILES = 20;
-const MAX_FILE_MB = 20;
+const MAX_FILES = 5;
+const MAX_FILE_MB = 10;
 const MAX_BATCH_MB = 30;
 const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
 const MAX_BATCH_BYTES = MAX_BATCH_MB * 1024 * 1024;
@@ -207,6 +207,7 @@ export const UploadInput: React.FC = () => {
         files: files.map((f) => ({
           filename: f.name,
           content_type: f.type || "image/jpeg",
+          size_bytes: f.size,
         })),
         settings,
       });
@@ -510,29 +511,55 @@ export const UploadInput: React.FC = () => {
         </div>
 
         {/* ── Settings row ──────────────────────────────────────────── */}
-        <div className="flex items-center gap-3 flex-wrap px-6 py-4 bg-gradient-to-r from-yellow-600/10 to-yellow-800/10 border-y border-white/5">
-          <span className="font-schibsted font-medium text-yellow-500 text-sm mr-1">
-            Settings:
-          </span>
+        <div className="px-6 py-8 bg-gradient-to-b from-yellow-600/5 to-transparent border-y border-white/5">
+          <div className="mb-5">
+            <span className="font-schibsted font-semibold text-yellow-500 text-xs tracking-wider uppercase">
+              Compression Settings
+            </span>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Format */}
+            <div className="flex flex-col gap-2">
+              <label className="text-gray-300 text-sm font-schibsted font-medium">Output Format</label>
+              <CustomDropdown
+                id="format-dropdown"
+                options={FORMAT_OPTIONS}
+                value={format}
+                onChange={setFormat}
+              />
+              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                Choose the output file extension.
+              </span>
+            </div>
 
-          <CustomDropdown
-            id="format-dropdown"
-            options={FORMAT_OPTIONS}
-            value={format}
-            onChange={setFormat}
-          />
-          <CustomDropdown
-            id="quality-dropdown"
-            options={QUALITY_OPTIONS}
-            value={quality}
-            onChange={setQuality}
-          />
-          <CustomDropdown
-            id="maxwidth-dropdown"
-            options={MAX_WIDTH_OPTIONS}
-            value={maxWidth}
-            onChange={setMaxWidth}
-          />
+            {/* Quality */}
+            <div className="flex flex-col gap-2">
+              <label className="text-gray-300 text-sm font-schibsted font-medium">Image Quality</label>
+              <CustomDropdown
+                id="quality-dropdown"
+                options={QUALITY_OPTIONS}
+                value={quality}
+                onChange={setQuality}
+              />
+              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                Compression vs. file size tradeoff.
+              </span>
+            </div>
+
+            {/* Max Width */}
+            <div className="flex flex-col gap-2">
+              <label className="text-gray-300 text-sm font-schibsted font-medium">Maximum Width</label>
+              <CustomDropdown
+                id="maxwidth-dropdown"
+                options={MAX_WIDTH_OPTIONS}
+                value={maxWidth}
+                onChange={setMaxWidth}
+              />
+              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                Scale down large images to fit.
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* ── Action bar ────────────────────────────────────────────── */}
