@@ -63,7 +63,6 @@ data "aws_iam_policy_document" "apigw_lambda_least_privilege" {
     sid    = "AllowCloudWatchLogs"
     effect = "Allow"
     actions = [
-      "logs:CreateLogGroup",
       "logs:CreateLogStream",
       "logs:PutLogEvents"
     ]
