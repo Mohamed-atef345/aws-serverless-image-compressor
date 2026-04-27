@@ -1,6 +1,5 @@
 resource "aws_sns_topic" "ops_alerts" {
-  name              = "image-compressor-ops-alerts"
-  kms_master_key_id = "alias/aws/sns"
+  name = "image-compressor-ops-alerts"
 }
 
 resource "aws_sns_topic_subscription" "ops_alerts_email_target" {

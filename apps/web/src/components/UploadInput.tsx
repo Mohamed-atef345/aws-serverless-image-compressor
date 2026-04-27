@@ -5,7 +5,6 @@ import {
   createBatchUpload,
   uploadToPresignedUrl,
   getBatchStatus,
-  getJobStatus,
   getBatchDownload,
   type UploadSettings,
   type CreateBatchResponse,
@@ -16,7 +15,9 @@ function inferDownloadFilename(downloadUrl: string, fallback: string): string {
     const url = new URL(downloadUrl);
     const key = url.searchParams.get("response-content-disposition");
     if (key) {
-      const match = key.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      const match = key.match(
+        /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i,
+      );
       const encoded = match?.[1] ?? match?.[2];
       if (encoded) {
         return decodeURIComponent(encoded);
@@ -30,7 +31,10 @@ function inferDownloadFilename(downloadUrl: string, fallback: string): string {
   return fallback;
 }
 
-function triggerBrowserDownload(downloadUrl: string, fallbackName: string): void {
+function triggerBrowserDownload(
+  downloadUrl: string,
+  fallbackName: string,
+): void {
   const anchor = document.createElement("a");
   anchor.href = downloadUrl;
   anchor.download = inferDownloadFilename(downloadUrl, fallbackName);
@@ -142,7 +146,7 @@ export const UploadInput: React.FC = () => {
         messages.push(`${skippedType} unsupported file type`);
       }
       if (skippedSingleSize > 0) {
-        messages.push(`${skippedSingleSize} file(s) exceed ${MAX_FILE_MB} MB each`);
+        messages.push(`single file size must be less than ${MAX_FILE_MB} MB`);
       }
       if (skippedBatchSize > 0) {
         messages.push(`total batch limit is ${MAX_BATCH_MB} MB`);
@@ -374,237 +378,262 @@ export const UploadInput: React.FC = () => {
           onComplete={handleProcessingComplete}
           onError={handleProcessingError}
           getBatchStatus={getBatchStatus}
-          getJobStatus={getJobStatus}
         />
       )}
 
-      <div className="w-full max-w-[760px] rounded-3xl bg-[#0a0a0a]/90 backdrop-blur-xl shadow-2xl border border-white/10 overflow-visible">
-        {/* ── Drop zone ──────────────────────────────────────────────── */}
-        <div
-          id="drop-zone"
-          onDragOver={onDragOver}
-          onDragLeave={onDragLeave}
-          onDrop={onDrop}
-          onClick={() => files.length === 0 && fileInputRef.current?.click()}
-          className={`relative flex flex-col items-center justify-center gap-3 px-8 py-10 cursor-pointer transition-all duration-200 rounded-t-3xl ${
-            isDragOver
-              ? "bg-yellow-500/10 border-2 border-dashed border-yellow-500/50"
-              : files.length > 0
-                ? "bg-black/40 border-b border-white/10"
-                : "hover:bg-black/60 border-2 border-dashed border-white/10 hover:border-yellow-500/30 bg-black/40"
-          }`}
-        >
-          <input
-            ref={fileInputRef}
-            id="file-input"
-            type="file"
-            multiple
-            accept={ACCEPTED_TYPES.join(",")}
-            className="hidden"
-            onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
-          />
+      <div className="flex flex-col items-center w-full max-w-[760px]">
+        <div className="w-full rounded-3xl bg-[#0a0a0a]/90 backdrop-blur-xl shadow-2xl border border-white/10 overflow-visible">
+          {/* ── Drop zone ──────────────────────────────────────────────── */}
+          <div
+            id="drop-zone"
+            onDragOver={onDragOver}
+            onDragLeave={onDragLeave}
+            onDrop={onDrop}
+            onClick={() => files.length === 0 && fileInputRef.current?.click()}
+            className={`relative flex flex-col items-center justify-center gap-3 px-8 py-10 cursor-pointer transition-all duration-200 rounded-t-3xl ${
+              isDragOver
+                ? "bg-yellow-500/10 border-2 border-dashed border-yellow-500/50"
+                : files.length > 0
+                  ? "bg-black/40 border-b border-white/10"
+                  : "hover:bg-black/60 border-2 border-dashed border-white/10 hover:border-yellow-500/30 bg-black/40"
+            }`}
+          >
+            <input
+              ref={fileInputRef}
+              id="file-input"
+              type="file"
+              multiple
+              accept={ACCEPTED_TYPES.join(",")}
+              className="hidden"
+              onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
+            />
 
-          {files.length === 0 ? (
-            <>
-              <div className="w-14 h-14 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
-                <svg
-                  className="w-7 h-7"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={1.5}
-                    d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                  />
-                </svg>
-              </div>
-              <div className="text-center">
-                <p className="font-schibsted font-semibold text-gray-200">
-                  Drop images here, or{" "}
-                  <span className="text-yellow-500 hover:text-yellow-400 transition-colors underline underline-offset-2">
-                    browse
-                  </span>
-                </p>
-                <p className="text-gray-500 text-xs mt-1">
-                  JPEG, PNG, WebP, GIF · max {MAX_FILE_MB} MB/file · {MAX_BATCH_MB} MB total · up to {MAX_FILES} files
-                </p>
-              </div>
-            </>
-          ) : (
-            <div className="w-full flex flex-col gap-2">
-              <div className="flex items-center justify-between mb-1">
-                <span className="font-schibsted font-semibold text-gray-300 text-sm">
-                  {files.length} file{files.length !== 1 ? "s" : ""} selected
-                </span>
-                <button
-                  type="button"
-                  className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors font-schibsted"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fileInputRef.current?.click();
-                  }}
-                >
-                  + Add more
-                </button>
-              </div>
-              <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
-                {files.map((f, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center justify-between px-3 py-2 bg-black/60 rounded-lg border border-white/5 shadow-sm"
+            {files.length === 0 ? (
+              <>
+                <div className="w-14 h-14 rounded-2xl bg-yellow-500/10 border border-yellow-500/20 flex items-center justify-center text-yellow-500">
+                  <svg
+                    className="w-7 h-7"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
                   >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-7 h-7 rounded bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
-                        <svg
-                          className="w-4 h-4 text-yellow-500"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01"
-                          />
-                        </svg>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.5}
+                      d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                    />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <p className="font-schibsted font-semibold text-gray-200">
+                    Drop images here, or{" "}
+                    <span className="text-yellow-500 hover:text-yellow-400 transition-colors underline underline-offset-2">
+                      browse
+                    </span>
+                  </p>
+                  <p className="text-gray-500 text-xs mt-1">
+                    JPEG, PNG, WebP, GIF · max {MAX_FILE_MB} MB/file ·{" "}
+                    {MAX_BATCH_MB} MB total · up to {MAX_FILES} files
+                  </p>
+                </div>
+              </>
+            ) : (
+              <div className="w-full flex flex-col gap-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="font-schibsted font-semibold text-gray-300 text-sm">
+                    {files.length} file{files.length !== 1 ? "s" : ""} selected
+                  </span>
+                  <button
+                    type="button"
+                    className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors font-schibsted"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                  >
+                    + Add more
+                  </button>
+                </div>
+                <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
+                  {files.map((f, i) => (
+                    <div
+                      key={i}
+                      className="flex items-center justify-between px-3 py-2 bg-black/60 rounded-lg border border-white/5 shadow-sm"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 rounded bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
+                          <svg
+                            className="w-4 h-4 text-yellow-500"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01"
+                            />
+                          </svg>
+                        </div>
+                        <span className="text-sm text-gray-300 font-schibsted truncate">
+                          {f.name}
+                        </span>
                       </div>
-                      <span className="text-sm text-gray-300 font-schibsted truncate">
-                        {f.name}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-3 flex-shrink-0 ml-2">
-                      <span className="text-xs text-gray-500">
-                        {prettySize(f.size)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          removeFile(i);
-                        }}
-                        className="text-gray-500 hover:text-red-400 transition-colors"
-                      >
-                        <svg
-                          className="w-4 h-4"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
+                      <div className="flex items-center gap-3 flex-shrink-0 ml-2">
+                        <span className="text-xs text-gray-500">
+                          {prettySize(f.size)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFile(i);
+                          }}
+                          className="text-gray-500 hover:text-red-400 transition-colors"
                         >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M6 18L18 6M6 6l12 12"
-                          />
-                        </svg>
-                      </button>
+                          <svg
+                            className="w-4 h-4"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M6 18L18 6M6 6l12 12"
+                            />
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── Settings row ──────────────────────────────────────────── */}
-        <div className="px-6 py-8 bg-gradient-to-b from-yellow-600/5 to-transparent border-y border-white/5">
-          <div className="mb-5">
-            <span className="font-schibsted font-semibold text-yellow-500 text-xs tracking-wider uppercase">
-              Compression Settings
-            </span>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Format */}
-            <div className="flex flex-col gap-2">
-              <label className="text-gray-300 text-sm font-schibsted font-medium">Output Format</label>
-              <CustomDropdown
-                id="format-dropdown"
-                options={FORMAT_OPTIONS}
-                value={format}
-                onChange={setFormat}
-              />
-              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
-                Choose the output file extension.
-              </span>
-            </div>
-
-            {/* Quality */}
-            <div className="flex flex-col gap-2">
-              <label className="text-gray-300 text-sm font-schibsted font-medium">Image Quality</label>
-              <CustomDropdown
-                id="quality-dropdown"
-                options={QUALITY_OPTIONS}
-                value={quality}
-                onChange={setQuality}
-              />
-              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
-                Compression vs. file size tradeoff.
-              </span>
-            </div>
-
-            {/* Max Width */}
-            <div className="flex flex-col gap-2">
-              <label className="text-gray-300 text-sm font-schibsted font-medium">Maximum Width</label>
-              <CustomDropdown
-                id="maxwidth-dropdown"
-                options={MAX_WIDTH_OPTIONS}
-                value={maxWidth}
-                onChange={setMaxWidth}
-              />
-              <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
-                Scale down large images to fit.
-              </span>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Action bar ────────────────────────────────────────────── */}
-        <div className="flex items-center justify-between px-6 py-4 rounded-b-3xl">
-          <div className="text-xs text-gray-500 font-schibsted">
-            {files.length === 0
-              ? "No files selected"
-              : `${files.length} image${files.length !== 1 ? "s" : ""} · ${prettySize(files.reduce((a, f) => a + f.size, 0))} / ${MAX_BATCH_MB} MB`}
+            )}
           </div>
 
-          {phase === "uploading" ? (
-            <div className="flex items-center gap-3">
-              <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full transition-all duration-300"
-                  style={{width: `${uploadProgress}%`}}
+          {/* ── Settings row ──────────────────────────────────────────── */}
+          <div className="px-6 py-8 bg-gradient-to-b from-yellow-600/5 to-transparent border-y border-white/5">
+            <div className="mb-5">
+              <span className="font-schibsted font-semibold text-yellow-500 text-xs tracking-wider uppercase">
+                Compression Settings
+              </span>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Format */}
+              <div className="flex flex-col gap-2">
+                <label className="text-gray-300 text-sm font-schibsted font-medium">
+                  Output Format
+                </label>
+                <CustomDropdown
+                  id="format-dropdown"
+                  options={FORMAT_OPTIONS}
+                  value={format}
+                  onChange={setFormat}
                 />
+                <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                  Choose the output file extension.
+                </span>
               </div>
-              <span className="text-sm text-yellow-500 font-schibsted font-semibold">
-                {uploadProgress}%
-              </span>
+
+              {/* Quality */}
+              <div className="flex flex-col gap-2">
+                <label className="text-gray-300 text-sm font-schibsted font-medium">
+                  Image Quality
+                </label>
+                <CustomDropdown
+                  id="quality-dropdown"
+                  options={QUALITY_OPTIONS}
+                  value={quality}
+                  onChange={setQuality}
+                />
+                <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                  Compression vs. file size tradeoff.
+                </span>
+              </div>
+
+              {/* Max Width */}
+              <div className="flex flex-col gap-2">
+                <label className="text-gray-300 text-sm font-schibsted font-medium">
+                  Maximum Width
+                </label>
+                <CustomDropdown
+                  id="maxwidth-dropdown"
+                  options={MAX_WIDTH_OPTIONS}
+                  value={maxWidth}
+                  onChange={setMaxWidth}
+                />
+                <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
+                  Scale down large images to fit.
+                </span>
+              </div>
             </div>
-          ) : (
-            <button
-              id="compress-button"
-              type="button"
-              disabled={files.length === 0}
-              onClick={handleCompress}
-              className={`px-6 py-2.5 rounded-xl font-schibsted font-semibold text-sm transition-all duration-200 ${
-                files.length === 0
-                  ? "bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed"
-                  : "bg-gradient-to-r from-yellow-400 to-yellow-600 text-black shadow-[0_0_15px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:brightness-110"
-              }`}
-            >
-              Compress{" "}
-              {files.length > 0
-                ? `${files.length} image${files.length !== 1 ? "s" : ""}`
-                : "images"}
-            </button>
-          )}
+          </div>
+
+          {/* ── Action bar ────────────────────────────────────────────── */}
+          <div className="flex items-center justify-between px-6 py-4 rounded-b-3xl">
+            <div className="text-xs text-gray-500 font-schibsted">
+              {files.length === 0
+                ? "No files selected"
+                : `${files.length} image${files.length !== 1 ? "s" : ""} · ${prettySize(files.reduce((a, f) => a + f.size, 0))} / ${MAX_BATCH_MB} MB`}
+            </div>
+
+            {phase === "uploading" ? (
+              <div className="flex items-center gap-3">
+                <div className="w-32 h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full transition-all duration-300"
+                    style={{width: `${uploadProgress}%`}}
+                  />
+                </div>
+                <span className="text-sm text-yellow-500 font-schibsted font-semibold">
+                  {uploadProgress}%
+                </span>
+              </div>
+            ) : (
+              <button
+                id="compress-button"
+                type="button"
+                disabled={files.length === 0}
+                onClick={handleCompress}
+                className={`px-6 py-2.5 rounded-xl font-schibsted font-semibold text-sm transition-all duration-200 ${
+                  files.length === 0
+                    ? "bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed"
+                    : "bg-gradient-to-r from-yellow-400 to-yellow-600 text-black shadow-[0_0_15px_rgba(250,204,21,0.2)] hover:shadow-[0_0_25px_rgba(250,204,21,0.4)] hover:brightness-110"
+                }`}
+              >
+                Compress{" "}
+                {files.length > 0
+                  ? `${files.length} image${files.length !== 1 ? "s" : ""}`
+                  : "images"}
+              </button>
+            )}
+          </div>
         </div>
+        {validationMessage && (
+          <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl flex items-center gap-2 shadow-lg max-w-[760px] w-full justify-center">
+            <svg
+              className="w-5 h-5 text-red-400 flex-shrink-0"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <p className="text-sm text-red-400 font-schibsted font-medium">
+              {validationMessage}
+            </p>
+          </div>
+        )}
       </div>
-      {validationMessage && (
-        <p className="mt-3 text-xs text-red-400 font-schibsted">{validationMessage}</p>
-      )}
     </DropdownContext.Provider>
   );
 };

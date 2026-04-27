@@ -1,6 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo } from 'react';
 import { ProcessingAnimation } from './ProcessingAnimation';
-import type { BatchStatusResponse, JobStatusResponse } from '../api';
+import type { BatchStatusResponse } from '../api';
 
 interface ProcessingOverlayProps {
   batchId: string;
@@ -8,21 +8,29 @@ interface ProcessingOverlayProps {
   onComplete: (batchId: string) => void;
   onError: (message: string) => void;
   getBatchStatus: (batchId: string) => Promise<BatchStatusResponse>;
-  getJobStatus: (jobId: string) => Promise<JobStatusResponse>;
 }
 
-const STATUS_LABELS: Record<string, string> = {
+type JobPhase = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+
+const STATUS_LABELS: Record<JobPhase, string> = {
   PENDING:    'Queued',
   PROCESSING: 'Compressing…',
   COMPLETED:  'Done',
   FAILED:     'Failed',
 };
 
-const STATUS_COLORS: Record<string, string> = {
+const STATUS_COLORS: Record<JobPhase, string> = {
   PENDING:    'text-gray-500',
-  PROCESSING: 'text-yellow-400 animate-pulse',
+  PROCESSING: 'text-yellow-400',
   COMPLETED:  'text-emerald-400',
   FAILED:     'text-red-400',
+};
+
+const DOT_COLORS: Record<JobPhase, string> = {
+  PENDING:    'bg-gray-500',
+  PROCESSING: 'bg-yellow-400',
+  COMPLETED:  'bg-emerald-400',
+  FAILED:     'bg-red-400',
 };
 
 const LOG_MESSAGES = [
@@ -36,22 +44,55 @@ const LOG_MESSAGES = [
   'Finalising output stream…',
 ];
 
+/**
+ * Derive per-job visual status from the batch-level aggregates.
+ * The worker processes jobs roughly in SQS arrival order, so we
+ * show the first N as completed, the next one as processing, and
+ * the rest as queued.  This avoids polling each job individually.
+ */
+function deriveJobPhases(
+  jobCount: number,
+  batch: BatchStatusResponse | null,
+): JobPhase[] {
+  if (!batch) return Array(jobCount).fill('PENDING');
+
+  const { completed_jobs: completed, failed_jobs: failed, status } = batch;
+  const finished = completed + failed;
+
+  return Array.from({ length: jobCount }, (_, i) => {
+    // Batch reached a terminal state — assign completed then failed
+    if (status === 'COMPLETED' || status === 'FAILED') {
+      return i < completed ? 'COMPLETED' : 'FAILED';
+    }
+    if (i < completed) return 'COMPLETED';
+    if (i < finished) return 'FAILED';
+    if (i === finished && (status === 'PROCESSING' || finished > 0)) {
+      return 'PROCESSING';
+    }
+    return 'PENDING';
+  });
+}
+
+const POLL_INTERVAL_MS = 3000;
+
 export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
   batchId,
   jobs,
   onComplete,
   onError,
   getBatchStatus,
-  getJobStatus,
 }) => {
   const [batch, setBatch] = useState<BatchStatusResponse | null>(null);
-  const [jobStatuses, setJobStatuses] = useState<Record<string, JobStatusResponse>>({});
-  const [lastKnownStatuses, setLastKnownStatuses] = useState<Record<string, JobStatusResponse["status"]>>({});
   const [logLines, setLogLines] = useState<string[]>(['Initialising batch…']);
   const logRef = useRef<HTMLDivElement>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const logIdxRef = useRef(0);
+
+  const jobPhases = useMemo(
+    () => deriveJobPhases(jobs.length, batch),
+    [jobs.length, batch],
+  );
 
   // Scroll log to bottom
   useEffect(() => {
@@ -70,55 +111,12 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
     return () => { if (logTimerRef.current) clearInterval(logTimerRef.current); };
   }, []);
 
-  // Poll batch + jobs every 1 s
+  // Poll batch status only — single request per cycle
   useEffect(() => {
     const poll = async () => {
       try {
         const batchData = await getBatchStatus(batchId);
         setBatch(batchData);
-
-        // Update individual job statuses
-        const updates: Record<string, JobStatusResponse> = {};
-        await Promise.allSettled(
-          jobs.map(async (j) => {
-            try {
-              updates[j.job_id] = await getJobStatus(j.job_id);
-            } catch {/* keep previous */}
-          })
-        );
-        setJobStatuses((prev) => ({ ...prev, ...updates }));
-
-        const statusFromBatch = (() => {
-          if (!batchData) return null;
-          if (batchData.status === "COMPLETED") return "COMPLETED" as const;
-          if (batchData.status === "FAILED") return null;
-          if ((batchData.completed_jobs ?? 0) > 0 || (batchData.failed_jobs ?? 0) > 0) {
-            return "PROCESSING" as const;
-          }
-          return null;
-        })();
-
-        setLastKnownStatuses((prev) => {
-          const next = {...prev};
-          for (const job of jobs) {
-            const reported = updates[job.job_id]?.status;
-            if (reported) {
-              if (next[job.job_id] !== "COMPLETED" && next[job.job_id] !== "FAILED") {
-                next[job.job_id] = reported;
-              }
-              continue;
-            }
-
-            if (
-              statusFromBatch &&
-              next[job.job_id] !== "COMPLETED" &&
-              next[job.job_id] !== "FAILED"
-            ) {
-              next[job.job_id] = statusFromBatch;
-            }
-          }
-          return next;
-        });
 
         if (batchData.status === 'COMPLETED' || batchData.status === 'FAILED') {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -137,9 +135,9 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
     };
 
     poll();
-    pollRef.current = setInterval(poll, 1000);
+    pollRef.current = setInterval(poll, POLL_INTERVAL_MS);
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
-  }, [batchId, jobs, getBatchStatus, getJobStatus, onComplete, onError]);
+  }, [batchId, getBatchStatus, onComplete, onError]);
 
   const progress = batch?.progress_percent ?? 0;
   const completed = batch?.completed_jobs ?? 0;
@@ -191,18 +189,25 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
 
           {/* Per-job status list */}
           <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1 scrollbar-thin">
-            {jobs.map((j) => {
-              const status = jobStatuses[j.job_id]?.status ?? lastKnownStatuses[j.job_id] ?? 'PENDING';
+            {jobs.map((j, i) => {
+              const phase = jobPhases[i];
               return (
-                  <div
+                <div
                   key={j.job_id}
-                  className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 border border-white/5"
+                  className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/5 border border-white/5 transition-all duration-500"
                 >
-                  <span className="text-sm text-gray-300 font-schibsted truncate max-w-[70%]">
-                    {j.filename}
-                  </span>
-                  <span className={`text-xs font-schibsted font-semibold ${STATUS_COLORS[status]}`}>
-                    {STATUS_LABELS[status]}
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <span
+                      className={`w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-500 ${DOT_COLORS[phase]} ${phase === 'PROCESSING' ? 'animate-pulse' : ''}`}
+                    />
+                    <span className="text-sm text-gray-300 font-schibsted truncate max-w-[70%]">
+                      {j.filename}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-xs font-schibsted font-semibold transition-colors duration-500 ${STATUS_COLORS[phase]} ${phase === 'PROCESSING' ? 'animate-pulse' : ''}`}
+                  >
+                    {STATUS_LABELS[phase]}
                   </span>
                 </div>
               );

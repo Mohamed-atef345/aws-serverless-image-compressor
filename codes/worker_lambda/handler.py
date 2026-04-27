@@ -199,6 +199,33 @@ def _compress_image(
             if working.mode not in ("RGB", "L"):
                 working = working.convert("RGB")
 
+        # ── PNG quantization ─────────────────────────────────────────
+        # PNG is lossless, so the only effective way to shrink file size
+        # (beyond DEFLATE level) is to reduce the color palette.  We map
+        # the user-facing quality value to a palette size.
+        if output_format == "PNG":
+            has_alpha = working.mode in ("RGBA", "LA", "PA")
+
+            # Map quality → number of palette colours
+            if quality >= 95:
+                max_colors = 256
+            elif quality >= 80:
+                max_colors = 256
+            elif quality >= 65:
+                max_colors = 128
+            else:
+                max_colors = 64
+
+            if has_alpha:
+                # Quantize RGBA images while preserving transparency
+                working = working.convert("RGBA")
+                working = working.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
+                working = working.convert("RGBA")
+            else:
+                working = working.convert("RGB")
+                working = working.quantize(colors=max_colors, method=Image.Quantize.MEDIANCUT, dither=Image.Dither.FLOYDSTEINBERG)
+                working = working.convert("RGB")
+
         output = BytesIO()
         save_kwargs: dict[str, object] = {}
         if output_format in {"JPEG", "WEBP"}:
@@ -206,6 +233,7 @@ def _compress_image(
             save_kwargs["optimize"] = True
         elif output_format == "PNG":
             save_kwargs["optimize"] = True
+            save_kwargs["compress_level"] = 9
 
         try:
             working.save(output, format=output_format, **save_kwargs)
