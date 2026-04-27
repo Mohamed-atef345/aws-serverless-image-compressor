@@ -77,7 +77,7 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 | Storage       | S3 buckets for frontend, uploads, and compressed output       |
 | IaC           | Terraform 1.x, AWS Provider 6.39                              |
 | CI/CD         | Manual/local deployment flow (GitHub Actions planned)         |
-| Observability | CloudWatch logs (worker IAM includes X-Ray permissions)       |
+| Observability | CloudWatch logs/alarms/dashboard + SNS alerts + X-Ray tracing |
 
 ## Repository Structure
 
@@ -100,12 +100,15 @@ image_compressor/
 │           ├── acm/
 │           ├── api gateway/
 │           ├── cdn/
+│           ├── cloudwatch_dashboard/
 │           ├── dynamodb/
 │           ├── iam/
 │           ├── lambda/
 │           ├── route 53/
+│           ├── sns/
 │           ├── sqs/
-│           └── vpc/                      # currently commented in root
+│           ├── vpc/                      # currently commented in root
+│           └── waf/
 ├── .gitignore
 └── README.md
 ```
@@ -114,17 +117,20 @@ image_compressor/
 
 ### Implemented Modules
 
-| Module        | Description                                                              | Key Resources                                                         |
-| ------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `S3_buckets`  | Frontend, uploads, and processed buckets with encryption/versioning/CORS | `aws_s3_bucket`, versioning, SSE, CORS, upload notifications          |
-| `cdn`         | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior    | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
-| `acm`         | DNS-validated certificate for root and wildcard domain                   | `aws_acm_certificate`, validation records                             |
-| `route 53`    | Alias routing from subdomain to CloudFront                               | Route53 record set                                                    |
-| `dynamodb`    | Job and batch metadata table with GSI and TTL                            | `aws_dynamodb_table`                                                  |
-| `api gateway` | REST resources, methods, integrations, deployment and stage              | API Gateway resources/methods/integrations/stage                      |
-| `iam`         | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy | IAM roles, policies, attachments                                      |
-| `lambda`      | API Lambda and worker Lambda packaging/deployment                        | `aws_lambda_function`, event source mapping, layer association        |
-| `sqs`         | Main queue, DLQ, redrive policies, and S3 send-message policy            | `aws_sqs_queue`, queue policy, redrive policy                         |
+| Module                 | Description                                                              | Key Resources                                                         |
+| ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| `S3_buckets`           | Frontend, uploads, and processed buckets with encryption/versioning/CORS | `aws_s3_bucket`, versioning, SSE, CORS, upload notifications          |
+| `cdn`                  | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior    | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
+| `acm`                  | DNS-validated certificate for root and wildcard domain                   | `aws_acm_certificate`, validation records                             |
+| `route 53`             | Alias routing from subdomain to CloudFront                               | Route53 record set                                                    |
+| `dynamodb`             | Job and batch metadata table with GSI and TTL                            | `aws_dynamodb_table`                                                  |
+| `api gateway`          | REST resources, methods, integrations, deployment and stage              | API Gateway resources/methods/integrations/stage                      |
+| `iam`                  | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy | IAM roles, policies, attachments                                      |
+| `lambda`               | API Lambda and worker Lambda packaging/deployment                        | `aws_lambda_function`, event source mapping, layer association        |
+| `sns`                  | Ops alerts topic and email subscription                                  | `aws_sns_topic`, `aws_sns_topic_subscription`                         |
+| `sqs`                  | Main queue, DLQ, redrive policies, and S3 send-message policy            | `aws_sqs_queue`, queue policy, redrive policy                         |
+| `waf`                  | WAFv2 ACLs for CloudFront and API Gateway + associations/metrics         | `aws_wafv2_web_acl`, `aws_wafv2_web_acl_association`                  |
+| `cloudwatch_dashboard` | Unified ops dashboard for metrics and logs                               | `aws_cloudwatch_dashboard`                                            |
 
 ### Partially Implemented / Pending
 
@@ -134,9 +140,10 @@ image_compressor/
 
 ### Root Composition Notes
 
-- Active modules in root `infrastructure/terraform/main.tf`: `dynamodb`, `s3_buckets`, `cdn`, `route53`, `acm`, `iam`, `api_gateway`, `lambda`, `sqs`.
+- Active modules in root `infrastructure/terraform/main.tf`: `dynamodb`, `s3_buckets`, `cdn`, `route53`, `acm`, `iam`, `api_gateway`, `lambda`, `sqs`, `sns`, `waf`, `cloudwatch_dashboard`.
 - API Gateway invoke permissions are wired via `aws_lambda_permission` in root.
 - Worker Lambda consumes SQS with `batch_size = 5`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
+- CloudWatch alarms are wired to SNS (`ops_alerts`) for email notifications.
 - VPC module remains disabled in root for current deployment mode.
 - Terraform remote state is configured with an S3 backend and lockfile (`use_lockfile = true`).
 
@@ -206,12 +213,15 @@ Implemented DevOps features:
 - **Lambda packaging/runtime**: API and worker functions are packaged with Terraform `archive_file`; worker uses a Pillow Lambda layer zip and runs with `python3.14`, `120s` timeout, and `512 MB` memory.
 - **IAM least privilege**: separate API/worker Lambda roles with scoped S3, DynamoDB, SQS, and CloudWatch Logs permissions; worker role also includes X-Ray publish permissions.
 - **API deployment plumbing**: API Gateway REST resources/methods/integrations/stage are provisioned in Terraform with Lambda invoke permissions from API Gateway.
+- **Edge and API protection**: WAFv2 ACLs are attached to both CloudFront and API Gateway with managed rule groups and rate limiting.
+- **Observability baseline**: X-Ray active tracing is enabled for API Gateway and both Lambdas.
+- **CloudWatch monitoring**: log groups with retention, service alarms (Lambda, API Gateway, SQS/DLQ, DynamoDB, CloudFront, WAF), SNS alert routing, and a centralized CloudWatch dashboard module.
 
 Current delivery workflow:
 
 - Deployments are currently run manually via Terraform CLI (`init/plan/apply`) and local frontend build/deploy steps.
 - Pillow layer build is currently a local Docker-driven step before Terraform apply.
-- `.github/workflows` is not present yet in this repository.
+- `.github/workflows` directory exists, but workflow files are still pending.
 
 Planned CI/CD:
 
@@ -226,10 +236,12 @@ Implemented:
 - CloudFront OAC with signed origin requests.
 - IAM least-privilege roles for API and worker Lambda functions.
 - Presigned upload/download architecture (no image payload through API Gateway).
+- WAFv2 attached to CloudFront and API Gateway.
+- CloudWatch + SNS alerting pipeline for operational events.
 
 Planned hardening:
 
-- WAF policy refinement.
+- WAF threshold tuning and optional full WAF logging pipeline.
 - API Gateway throttling and usage controls.
 - Tightened CORS origins for production domains.
 
@@ -243,20 +255,16 @@ Planned hardening:
 - Worker Lambda handler implementation in `codes/worker_lambda/handler.py`.
 - Worker IAM role/policy wiring.
 - CloudFront + ACM + Route53 infrastructure wiring for frontend delivery.
+- WAFv2 implementation and association for both CloudFront and API Gateway.
+- CloudWatch alarms across Lambda, API Gateway, SQS/DLQ, DynamoDB, CloudFront, and WAF.
+- SNS ops topic + email subscription integration for alarm notifications.
+- Centralized CloudWatch dashboard module for metrics and logs widgets.
 - Terraform remote state backend configuration with locking.
 - Core frontend upload and processing UX.
 
 ### In Progress
 
-- Pillow layer build/rebuild lifecycle for deployment updates.
-- Final infrastructure consistency checks and end-to-end validation.
-
-### Not Started
-
-- Shared package models/utilities (`packages/shared`).
-- Unit and integration test suites.
-- Full CI/CD workflows in `.github/workflows`.
-- OpenAPI publication and docs finalization.
+- Full CI/CD workflow files in `.github/workflows`.
 
 ## Getting Started
 
@@ -295,6 +303,12 @@ terraform plan
 terraform apply
 ```
 
+After apply, you can print the dashboard name for pipeline/ops usage:
+
+```bash
+terraform output cloudwatch_dashboard_name
+```
+
 ### 4) Run Frontend Locally
 
 ```bash
@@ -316,24 +330,26 @@ npm run dev
 | `table_name`                | `imageCompressionMetadata`           |
 | `message_retention_seconds` | `10800`                              |
 | `maxReceiveCount`           | `3`                                  |
+| `admin_email`               | no default (required)                |
+| `cloudwatch_dashboard_name` | `image-compressor-ops-overview`      |
 
 ### API Lambda Environment
 
-| Variable               | Purpose                                                       |
-| ---------------------- | ------------------------------------------------------------- |
-| `DYNAMODB_TABLE`       | DynamoDB table for jobs and batches                           |
-| `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                          |
-| `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs                     |
-| `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                           |
-| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records                     |
-| `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB)         |
-| `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (default 30 MB)    |
-| `MAX_BATCH_FILES`      | Max files per batch (configured as `5`)                       |
+| Variable               | Purpose                                                   |
+| ---------------------- | --------------------------------------------------------- |
+| `DYNAMODB_TABLE`       | DynamoDB table for jobs and batches                       |
+| `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                      |
+| `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs                 |
+| `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                       |
+| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records                 |
+| `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB)      |
+| `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (default 30 MB) |
+| `MAX_BATCH_FILES`      | Max files per batch (configured as `5`)                   |
 
 ### Frontend Environment
 
-| Variable            | Purpose                                      |
-| ------------------- | -------------------------------------------- |
+| Variable            | Purpose                                     |
+| ------------------- | ------------------------------------------- |
 | `VITE_API_BASE_URL` | Base URL for API requests from the web app. |
 
 ### Worker Lambda Environment

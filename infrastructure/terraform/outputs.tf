@@ -98,3 +98,7 @@ output "cloudfront_waf_acl_arn" {
 output "ops_sns_topic_arn" {
   value = module.sns.ops_sns_topic_arn
 }
+
+output "cloudwatch_dashboard_name" {
+  value = module.cloudwatch_dashboard.dashboard_name
+}
