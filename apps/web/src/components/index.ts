@@ -11,3 +11,5 @@ export {
 export {ProcessingOverlay} from "./ProcessingOverlay";
 export {ProcessingAnimation} from "./ProcessingAnimation";
 export * from "./Icons";
+export {FeaturesSection} from "./FeaturesSection";
+export {HowItWorksSection} from "./HowItWorksSection";

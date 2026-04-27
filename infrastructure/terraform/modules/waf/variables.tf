@@ -1,4 +1,4 @@
-variable "apigw_lambda_invoke_arn" {
+variable "api_gateway_stage_arn" {
   type = string
 }
 

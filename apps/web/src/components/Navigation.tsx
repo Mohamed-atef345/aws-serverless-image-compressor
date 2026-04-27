@@ -8,9 +8,8 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { label: 'Features', hasDropdown: true, href: '#features' },
+  { label: 'Features', href: '#features' },
   { label: 'How It Works', href: '#how-it-works' },
-  { label: 'Contact', href: '#contact' },
 ];
 
 export const Navigation: React.FC = () => {
@@ -39,20 +38,6 @@ export const Navigation: React.FC = () => {
               )}
             </a>
           ))}
-        </div>
-
-        {/* Right Side Buttons */}
-        <div className="flex items-center gap-3">
-          <button
-            className="w-[82px] h-[38px] font-schibsted font-medium text-sm tracking-menu text-gray-300 bg-transparent hover:text-white hover:bg-white/10 rounded-lg transition-colors"
-          >
-            Sign Up
-          </button>
-          <button
-            className="px-5 h-[38px] font-schibsted font-semibold text-sm tracking-menu text-black bg-gradient-to-r from-yellow-400 to-yellow-600 hover:from-yellow-300 hover:to-yellow-500 rounded-lg shadow-[0_0_15px_rgba(250,204,21,0.2)] transition-all"
-          >
-            Log In
-          </button>
         </div>
       </div>
     </nav>

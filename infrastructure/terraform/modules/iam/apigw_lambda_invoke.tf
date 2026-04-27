@@ -69,6 +69,15 @@ data "aws_iam_policy_document" "apigw_lambda_least_privilege" {
     ]
     resources = ["arn:aws:logs:*:*:*"]
   }
+
+  statement {
+    effect = "Allow"
+    actions = [
+      "xray:PutTraceSegments",
+      "xray:PutTelemetryRecords"
+    ]
+    resources = ["*"]
+  }
 }
 
 resource "aws_iam_policy" "apigw_lambda_policy" {
@@ -80,3 +89,4 @@ resource "aws_iam_role_policy_attachment" "apigw_lambda_policy_attachment" {
   role       = aws_iam_role.apigw_lambda_iam_role.name
   policy_arn = aws_iam_policy.apigw_lambda_policy.arn
 }
+

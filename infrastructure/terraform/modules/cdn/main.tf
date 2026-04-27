@@ -12,6 +12,7 @@ resource "aws_cloudfront_distribution" "s3_and_api_distribution" {
     origin_id                = var.s3_origin_id
   }
 
+  web_acl_id = var.cloudfront_waf_acl_arn
 
   enabled             = true
   is_ipv6_enabled     = true
@@ -103,4 +104,46 @@ resource "aws_cloudfront_distribution" "s3_and_api_distribution" {
     acm_certificate_arn = var.acm_certificate_arn
     ssl_support_method  = "sni-only"
   }
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudfront_5xx_error_rate" {
+  alarm_name          = "cloudfront-5xx-error-rate"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "5xxErrorRate"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 1
+  alarm_description   = "This metric monitors CloudFront 5xx error rate"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.s3_and_api_distribution.id
+    Region         = "Global"
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "cloudfront_total_error_rate" {
+  alarm_name          = "cloudfront-total-error-rate"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "TotalErrorRate"
+  namespace           = "AWS/CloudFront"
+  period              = 300
+  statistic           = "Average"
+  threshold           = 3
+  alarm_description   = "This metric monitors CloudFront total error rate"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    DistributionId = aws_cloudfront_distribution.s3_and_api_distribution.id
+    Region         = "Global"
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
 }

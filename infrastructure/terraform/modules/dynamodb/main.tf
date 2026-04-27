@@ -34,3 +34,43 @@ resource "aws_dynamodb_table" "image_compression_metadata" {
     Name = var.table_name
   }
 }
+
+resource "aws_cloudwatch_metric_alarm" "dynamodb_throttled_requests" {
+  alarm_name          = "dynamodb-throttled-requests"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ThrottledRequests"
+  namespace           = "AWS/DynamoDB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "This metric monitors DynamoDB throttled requests"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    TableName = aws_dynamodb_table.image_compression_metadata.name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "dynamodb_system_errors" {
+  alarm_name          = "dynamodb-system-errors"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "SystemErrors"
+  namespace           = "AWS/DynamoDB"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "This metric monitors DynamoDB system errors"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    TableName = aws_dynamodb_table.image_compression_metadata.name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}

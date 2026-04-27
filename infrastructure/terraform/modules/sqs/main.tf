@@ -56,3 +56,62 @@ resource "aws_sqs_queue_redrive_allow_policy" "image_uploads_deadletter_queue_re
   })
 }
 
+resource "aws_cloudwatch_metric_alarm" "sqs_oldest_message_age" {
+  alarm_name          = "sqs-oldest-message-age-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 300
+  alarm_description   = "This metric monitors SQS backlog age"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    QueueName = aws_sqs_queue.image_uploads_queue.name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "sqs_visible_messages" {
+  alarm_name          = "sqs-visible-messages-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 50
+  alarm_description   = "This metric monitors visible SQS messages"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    QueueName = aws_sqs_queue.image_uploads_queue.name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "dlq_visible_messages" {
+  alarm_name          = "sqs-dlq-visible-messages"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "ApproximateNumberOfMessagesVisible"
+  namespace           = "AWS/SQS"
+  period              = 300
+  statistic           = "Maximum"
+  threshold           = 1
+  alarm_description   = "This metric monitors DLQ visible messages"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    QueueName = aws_sqs_queue.image_uploads_deadletter_queue.name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}

@@ -19,11 +19,12 @@ resource "aws_lambda_permission" "apigw_invoke" {
 module "dynamodb" {
   source = "./modules/dynamodb"
 
-  table_name   = var.table_name
-  billing_mode = var.billing_mode
-  hash_key     = var.hash_key
-  range_key    = var.range_key
-  ttl          = var.ttl
+  table_name        = var.table_name
+  billing_mode      = var.billing_mode
+  hash_key          = var.hash_key
+  range_key         = var.range_key
+  ttl               = var.ttl
+  ops_sns_topic_arn = module.sns.ops_sns_topic_arn
 }
 
 
@@ -47,6 +48,8 @@ module "cdn" {
   domain_name                          = var.domain_name
   s3_origin_id                         = var.s3_origin_id
   acm_certificate_arn                  = module.acm.acm_certificate_arn
+  cloudfront_waf_acl_arn               = module.waf.cloudfront_waf_acl_arn
+  ops_sns_topic_arn                    = module.sns.ops_sns_topic_arn
 }
 
 module "route53" {
@@ -86,6 +89,7 @@ module "api_gateway" {
   source = "./modules/api gateway"
 
   apigw_lambda_invoke_arn = module.lambda.apigw_lambda_invoke_arn
+  ops_sns_topic_arn       = module.sns.ops_sns_topic_arn
 }
 
 module "lambda" {
@@ -97,6 +101,7 @@ module "lambda" {
   compressed_bucket_name  = module.s3_buckets.processed_bucket_name
   image_uploads_queue_arn = module.sqs.image_uploads_queue_arn
   worker_lambda_role_arn  = module.iam.worker_lambda_role_arn
+  ops_sns_topic_arn       = module.sns.ops_sns_topic_arn
 }
 
 module "sqs" {
@@ -106,4 +111,35 @@ module "sqs" {
   maxReceiveCount           = var.maxReceiveCount
   uploads_bucket_name       = var.uploads_bucket_name
   aws_region                = var.aws_region
+  ops_sns_topic_arn         = module.sns.ops_sns_topic_arn
+}
+
+module "waf" {
+  source = "./modules/waf"
+
+  api_gateway_stage_arn = module.api_gateway.api_gateway_stage_arn
+  ops_sns_topic_arn     = module.sns.ops_sns_topic_arn
+}
+
+module "sns" {
+  source = "./modules/sns"
+
+  admin_email = var.admin_email
+}
+
+module "cloudwatch_dashboard" {
+  source = "./modules/cloudwatch_dashboard"
+
+  dashboard_name             = var.cloudwatch_dashboard_name
+  aws_region                 = var.aws_region
+  apigw_lambda_name          = module.lambda.apigw_lambda_name
+  worker_lambda_name         = module.lambda.worker_lambda_name
+  api_name                   = module.api_gateway.api_name
+  api_stage_name             = module.api_gateway.api_stage_name
+  sqs_queue_name             = module.sqs.image_uploads_queue_name
+  sqs_dlq_name               = module.sqs.image_uploads_deadletter_queue_name
+  dynamodb_table_name        = module.dynamodb.dynamodb_table_name
+  cloudfront_distribution_id = module.cdn.cloudfront_distribution_id
+  cloudfront_waf_acl_name    = module.waf.cloudfront_waf_acl_name
+  api_gateway_waf_acl_name   = module.waf.api_gateway_waf_acl_name
 }

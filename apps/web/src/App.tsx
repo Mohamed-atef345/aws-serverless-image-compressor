@@ -1,5 +1,5 @@
 import React from 'react';
-import { StaticBackground, Navigation, HeroSection } from './components';
+import { StaticBackground, Navigation, HeroSection, FeaturesSection, HowItWorksSection } from './components';
 
 const App: React.FC = () => {
   return (
@@ -17,6 +17,12 @@ const App: React.FC = () => {
 
         {/* Hero Section */}
         <HeroSection />
+
+        {/* Features Section */}
+        <FeaturesSection />
+
+        {/* How It Works Section */}
+        <HowItWorksSection />
       </div>
     </div>
   );

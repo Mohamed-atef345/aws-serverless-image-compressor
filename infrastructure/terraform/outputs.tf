@@ -63,6 +63,10 @@ output "api_stage_invoke_url" {
   value = module.api_gateway.api_stage_invoke_url
 }
 
+output "api_gateway_stage_arn" {
+  value = module.api_gateway.api_gateway_stage_arn
+}
+
 output "api_execution_arn" {
   value = module.api_gateway.api_execution_arn
 }
@@ -87,3 +91,10 @@ output "image_uploads_queue_arn" {
   value = module.sqs.image_uploads_queue_arn
 }
 
+output "cloudfront_waf_acl_arn" {
+  value = module.waf.cloudfront_waf_acl_arn
+}
+
+output "ops_sns_topic_arn" {
+  value = module.sns.ops_sns_topic_arn
+}

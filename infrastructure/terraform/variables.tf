@@ -130,3 +130,15 @@ variable "maxReceiveCount" {
   type    = number
   default = 3
 }
+
+#================================== SNS Variables =================================#
+
+variable "admin_email" {
+  type        = string
+  description = "will be passed as an input from github actions pipeline"
+}
+
+variable "cloudwatch_dashboard_name" {
+  type    = string
+  default = "image-compressor-ops-overview"
+}

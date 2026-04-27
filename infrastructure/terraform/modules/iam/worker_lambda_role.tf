@@ -38,8 +38,8 @@ data "aws_iam_policy_document" "worker_lambda_policy" {
   }
 
   statement {
-    effect    = "Allow"
-    actions   = [
+    effect = "Allow"
+    actions = [
       "dynamodb:GetItem",
       "dynamodb:UpdateItem",
     ]

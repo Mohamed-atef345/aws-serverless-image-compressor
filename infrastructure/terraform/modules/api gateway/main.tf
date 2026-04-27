@@ -357,7 +357,152 @@ resource "aws_api_gateway_deployment" "main" {
 }
 
 resource "aws_api_gateway_stage" "main" {
-  deployment_id = aws_api_gateway_deployment.main.id
-  rest_api_id   = aws_api_gateway_rest_api.image_compression_api.id
-  stage_name    = "v1"
+  deployment_id        = aws_api_gateway_deployment.main.id
+  rest_api_id          = aws_api_gateway_rest_api.image_compression_api.id
+  stage_name           = "v1"
+  xray_tracing_enabled = true
+
+  access_log_settings {
+    destination_arn = aws_cloudwatch_log_group.api_gateway_access_logs.arn
+    format = jsonencode({
+      requestId      = "$context.requestId"
+      ip             = "$context.identity.sourceIp"
+      caller         = "$context.identity.caller"
+      user           = "$context.identity.user"
+      requestTime    = "$context.requestTime"
+      httpMethod     = "$context.httpMethod"
+      resourcePath   = "$context.resourcePath"
+      status         = "$context.status"
+      protocol       = "$context.protocol"
+      responseLength = "$context.responseLength"
+    })
+  }
+
+  depends_on = [aws_api_gateway_account.main]
+}
+
+resource "aws_cloudwatch_log_group" "api_gateway_access_logs" {
+  name              = "/aws/apigateway/image-compression-api-v1-access"
+  retention_in_days = 14
+}
+
+resource "aws_api_gateway_method_settings" "all" {
+  rest_api_id = aws_api_gateway_rest_api.image_compression_api.id
+  stage_name  = aws_api_gateway_stage.main.stage_name
+  method_path = "*/*"
+
+  settings {
+    metrics_enabled = true
+    logging_level   = "ERROR"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_gateway_5xx_errors" {
+  alarm_name          = "api-gateway-5xx-errors"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  metric_name         = "5XXError"
+  namespace           = "AWS/ApiGateway"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 1
+  alarm_description   = "This metric monitors API Gateway 5XX errors"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    ApiName = aws_api_gateway_rest_api.image_compression_api.name
+    Stage   = aws_api_gateway_stage.main.stage_name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_gateway_4xx_errors" {
+  alarm_name          = "api-gateway-4xx-errors"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "4XXError"
+  namespace           = "AWS/ApiGateway"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 20
+  alarm_description   = "This metric monitors sustained API Gateway 4XX errors"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    ApiName = aws_api_gateway_rest_api.image_compression_api.name
+    Stage   = aws_api_gateway_stage.main.stage_name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_gateway_latency_p95" {
+  alarm_name          = "api-gateway-latency-p95"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "Latency"
+  namespace           = "AWS/ApiGateway"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = 5000
+  alarm_description   = "This metric monitors API Gateway p95 latency"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    ApiName = aws_api_gateway_rest_api.image_compression_api.name
+    Stage   = aws_api_gateway_stage.main.stage_name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_gateway_integration_latency_p95" {
+  alarm_name          = "api-gateway-integration-latency-p95"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 2
+  metric_name         = "IntegrationLatency"
+  namespace           = "AWS/ApiGateway"
+  period              = 300
+  extended_statistic  = "p95"
+  threshold           = 4000
+  alarm_description   = "This metric monitors API Gateway integration p95 latency"
+  alarm_actions       = [var.ops_sns_topic_arn]
+
+  dimensions = {
+    ApiName = aws_api_gateway_rest_api.image_compression_api.name
+    Stage   = aws_api_gateway_stage.main.stage_name
+  }
+
+  treat_missing_data        = "notBreaching"
+  insufficient_data_actions = []
+}
+
+resource "aws_iam_role" "api_gateway_cloudwatch_role" {
+  name = "api-gateway-cloudwatch-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRole"
+        Effect = "Allow"
+        Principal = {
+          Service = "apigateway.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "api_gateway_cloudwatch_role_policy" {
+  role       = aws_iam_role.api_gateway_cloudwatch_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonAPIGatewayPushToCloudWatchLogs"
+}
+
+resource "aws_api_gateway_account" "main" {
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch_role.arn
 }

@@ -21,3 +21,7 @@ variable "worker_lambda_role_arn" {
 variable "image_uploads_queue_arn" {
   type = string
 }
+
+variable "ops_sns_topic_arn" {
+  type = string
+}

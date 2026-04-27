@@ -17,3 +17,7 @@ variable "range_key" {
 variable "ttl" {
   type = bool
 }
+
+variable "ops_sns_topic_arn" {
+  type = string
+}

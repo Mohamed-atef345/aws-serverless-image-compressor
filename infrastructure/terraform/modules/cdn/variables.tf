@@ -13,3 +13,11 @@ variable "s3_origin_id" {
 variable "acm_certificate_arn" {
   type = string
 }
+
+variable "cloudfront_waf_acl_arn" {
+  type = string
+}
+
+variable "ops_sns_topic_arn" {
+  type = string
+}
