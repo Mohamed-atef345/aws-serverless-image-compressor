@@ -134,7 +134,9 @@ jobs:
       pull-requests: write
     steps:
       - name: Getting Code
-        uses: actions/checkout@v6      
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0     
       - name: Create pull request if missing
         env:
           GH_TOKEN: ${{ github.token }}
