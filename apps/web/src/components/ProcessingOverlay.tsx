@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ProcessingAnimation } from './ProcessingAnimation';
 import type { BatchStatusResponse } from '../api';
 
@@ -34,14 +35,14 @@ const DOT_COLORS: Record<JobPhase, string> = {
 };
 
 const LOG_MESSAGES = [
-  'Analysing image metadata…',
-  'Stripping EXIF data…',
-  'Applying chroma subsampling…',
-  'Running DCT compression…',
-  'Optimising Huffman tables…',
-  'Quantising colour palette…',
-  'Writing compressed bytes…',
-  'Finalising output stream…',
+  'Connecting to processing queue...',
+  'Allocating serverless worker...',
+  'Fetching source images from bucket...',
+  'Analyzing image profiles and dimensions...',
+  'Applying compression settings...',
+  'Optimizing file size and encoding...',
+  'Writing processed files to destination...',
+  'Finalizing batch metadata...',
 ];
 
 /**
@@ -143,8 +144,8 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
   const completed = batch?.completed_jobs ?? 0;
   const total = batch?.total_jobs ?? jobs.length;
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md">
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md">
       <div className="relative w-full max-w-2xl mx-4 bg-[#111111]/95 backdrop-blur-xl rounded-3xl shadow-[0_0_50px_rgba(218,165,32,0.1)] overflow-hidden border border-white/10">
 
         {/* Top gradient bar */}
@@ -237,6 +238,7 @@ export const ProcessingOverlay: React.FC<ProcessingOverlayProps> = ({
         .scrollbar-thin::-webkit-scrollbar { width: 4px; }
         .scrollbar-thin::-webkit-scrollbar-thumb { background: #e5e7eb; border-radius: 4px; }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 };

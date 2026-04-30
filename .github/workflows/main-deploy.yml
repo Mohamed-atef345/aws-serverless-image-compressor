@@ -1,0 +1,41 @@
+name: Main deploy
+on:
+  push:
+    branches:
+      - main
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Getting Code
+        uses: actions/checkout@v6
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.9"
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
+          aws-region: ${{vars.AWS_REGION}}
+      - name: Build Pillow Lambda layer
+        run: |
+          rm -rf layer/python infrastructure/terraform/modules/lambda/pillow_layer.zip
+          mkdir -p layer/python
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/layer:/var/task/layer" \
+            public.ecr.aws/sam/build-python3.14:latest \
+            /bin/sh -c "pip install --no-cache-dir pillow -t /var/task/layer/python"
+          cd layer
+          zip -r ../infrastructure/terraform/modules/lambda/pillow_layer.zip python 
+      - name: Terraform init
+        working-directory: infrastructure/terraform
+        run: terraform init -input=false
+      - name: Terraform apply
+        working-directory: infrastructure/terraform
+        run: terraform apply -auto-approve -var="admin_email=${{ secrets.ADMIN_EMAIL }}"
+
+        

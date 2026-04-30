@@ -50,6 +50,10 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads_bucket_se
   }
 }
 
+resource "aws_s3_bucket_accelerate_configuration" "uploads_bucket_accelerate" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+  status = "Enabled"
+}
 resource "aws_s3_bucket_cors_configuration" "uploads_bucket_cors" {
   bucket = aws_s3_bucket.uploads_bucket.id
 

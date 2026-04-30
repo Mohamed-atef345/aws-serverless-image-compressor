@@ -98,10 +98,6 @@ jobs:
           key: ${{ runner.os }}-terraform-${{ hashFiles('infrastructure/terraform/.terraform.lock.hcl') }}
           restore-keys: |
             ${{ runner.os }}-terraform-
-      - name: Initialize Terraform
-        run: |
-          cd infrastructure/terraform
-          terraform init
       - name: Build Pillow Lambda layer
         run: |
           rm -rf layer/python infrastructure/terraform/modules/lambda/pillow_layer.zip

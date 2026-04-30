@@ -25,6 +25,7 @@ interface CustomDropdownProps {
   onChange: (value: string) => void;
   className?: string;
   id?: string;
+  disabled?: boolean;
 }
 
 export const CustomDropdown: React.FC<CustomDropdownProps> = ({
@@ -33,6 +34,7 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   onChange,
   className = '',
   id = 'dropdown',
+  disabled = false,
 }) => {
   const { openDropdownId, setOpenDropdownId } = useDropdownContext();
   const isOpen = openDropdownId === id;
@@ -41,6 +43,7 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
   const selectedOption = options.find((opt) => opt.value === value);
 
   const toggleOpen = () => {
+    if (disabled) return;
     if (isOpen) {
       setOpenDropdownId(null);
     } else {
@@ -80,9 +83,10 @@ export const CustomDropdown: React.FC<CustomDropdownProps> = ({
       <button
         type="button"
         onClick={toggleOpen}
-        className={`flex items-center w-full justify-between gap-2 px-4 py-2.5 rounded-xl bg-black/40 hover:bg-black/60 backdrop-blur-sm text-gray-200 text-sm font-schibsted font-medium transition-all duration-200 border border-white/10 hover:border-yellow-500/30 ${
-          isOpen ? 'border-yellow-500/50 bg-black/60 shadow-[0_0_15px_rgba(250,204,21,0.1)]' : ''
-        }`}
+        disabled={disabled}
+        className={`flex items-center w-full justify-between gap-2 px-4 py-2.5 rounded-xl bg-black/40 backdrop-blur-sm text-gray-200 text-sm font-schibsted font-medium transition-all duration-200 border border-white/10 ${
+          disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-black/60 hover:border-yellow-500/30'
+        } ${isOpen ? 'border-yellow-500/50 bg-black/60 shadow-[0_0_15px_rgba(250,204,21,0.1)]' : ''}`}
       >
         <span className="truncate">{selectedOption?.label}</span>
         <ChevronDownIcon
