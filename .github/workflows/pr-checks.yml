@@ -75,11 +75,13 @@ jobs:
     permissions:
       contents: read
       id-token: write
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
     steps:
       - name: Getting Code
         uses: actions/checkout@v6
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
           role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
           aws-region: ${{vars.AWS_REGION}}
@@ -87,6 +89,15 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.14.9"
+      - name: Create Terraform Plugin Cache Dir
+        run: mkdir -p ${{ env.TF_PLUGIN_CACHE_DIR }}
+      - name: Cache Terraform Plugins
+        uses: actions/cache@v6
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: ${{ runner.os }}-terraform-${{ hashFiles('infrastructure/terraform/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
       - name: Initialize Terraform
         run: |
           cd infrastructure/terraform
