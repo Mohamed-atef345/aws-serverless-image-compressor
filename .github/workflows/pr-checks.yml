@@ -130,13 +130,9 @@ jobs:
         run: |
           pr_exists=$(gh pr list --head "${{ github.ref_name }}" --base main --json number --jq 'length')
           if [ "$pr_exists" -eq "0" ]; then
-            pr_body=$(cat <<EOF
-            Automated PR triggered by push to \`${{ github.ref_name }}\` from commit \`${{ github.sha }}\`.
-            EOF
-            )
             gh pr create \
               --title "Auto-PR: Updates from ${{ github.ref_name }} from commit ${{ github.sha }}" \
-              --body "$pr_body" \
+              --body "Automated PR triggered by push to \`${{ github.ref_name }}\` from commit \`${{ github.sha }}\`." \
               --base main \
               --head "${{ github.ref_name }}"
             echo "Pull request created successfully."
