@@ -65,19 +65,19 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 
 ## Technology Stack
 
-| Layer         | Technology                                                    |
-| ------------- | ------------------------------------------------------------- |
-| Frontend      | React 19, Vite 6, TypeScript, TailwindCSS 3                   |
-| CDN           | CloudFront (OAC), Route 53, ACM                               |
-| API           | API Gateway (REST, Regional)                                  |
-| API Lambda    | Python 3.14, boto3                                            |
-| Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3                     |
-| Queue         | SQS Standard, Dead Letter Queue                               |
-| Database      | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL) |
+| Layer         | Technology                                                                      |
+| ------------- | ------------------------------------------------------------------------------- |
+| Frontend      | React 19, Vite 6, TypeScript, TailwindCSS 3                                     |
+| CDN           | CloudFront (OAC), Route 53, ACM                                                 |
+| API           | API Gateway (REST, Regional)                                                    |
+| API Lambda    | Python 3.14, boto3                                                              |
+| Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3                                       |
+| Queue         | SQS Standard, Dead Letter Queue                                                 |
+| Database      | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL)                   |
 | Storage       | S3 buckets for frontend, uploads (Transfer Acceleration), and compressed output |
-| IaC           | Terraform 1.x, AWS Provider 6.39                              |
-| CI/CD         | GitHub Actions (PR checks + main deploy via OIDC)             |
-| Observability | CloudWatch logs/alarms/dashboard + SNS alerts + X-Ray tracing |
+| IaC           | Terraform 1.x, AWS Provider 6.39                                                |
+| CI/CD         | GitHub Actions (PR checks + main deploy via OIDC)                               |
+| Observability | CloudWatch logs/alarms/dashboard + SNS alerts + X-Ray tracing                   |
 
 ## Repository Structure
 
@@ -117,20 +117,20 @@ image_compressor/
 
 ### Implemented Modules
 
-| Module                 | Description                                                              | Key Resources                                                         |
-| ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
+| Module                 | Description                                                                        | Key Resources                                                                                        |
+| ---------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | `S3_buckets`           | Frontend, uploads, and processed buckets with encryption/versioning/CORS/lifecycle | `aws_s3_bucket`, versioning, SSE, CORS, lifecycle rules, Transfer Acceleration, upload notifications |
-| `cdn`                  | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior    | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
-| `acm`                  | DNS-validated certificate for root and wildcard domain                   | `aws_acm_certificate`, validation records                             |
-| `route 53`             | Alias routing from subdomain to CloudFront                               | Route53 record set                                                    |
-| `dynamodb`             | Job and batch metadata table with GSI and TTL                            | `aws_dynamodb_table`                                                  |
-| `api gateway`          | REST resources, methods, integrations, deployment and stage              | API Gateway resources/methods/integrations/stage                      |
-| `iam`                  | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy | IAM roles, policies, attachments                                      |
-| `lambda`               | API Lambda and worker Lambda packaging/deployment                        | `aws_lambda_function`, event source mapping, layer association        |
-| `sns`                  | Ops alerts topic and email subscription                                  | `aws_sns_topic`, `aws_sns_topic_subscription`                         |
-| `sqs`                  | Main queue, DLQ, redrive policies, and S3 send-message policy            | `aws_sqs_queue`, queue policy, redrive policy                         |
-| `waf`                  | WAFv2 ACLs for CloudFront and API Gateway + associations/metrics         | `aws_wafv2_web_acl`, `aws_wafv2_web_acl_association`                  |
-| `cloudwatch_dashboard` | Unified ops dashboard for metrics and logs                               | `aws_cloudwatch_dashboard`                                            |
+| `cdn`                  | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior              | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control`                                |
+| `acm`                  | DNS-validated certificate for root and wildcard domain                             | `aws_acm_certificate`, validation records                                                            |
+| `route 53`             | Alias routing from subdomain to CloudFront                                         | Route53 record set                                                                                   |
+| `dynamodb`             | Job and batch metadata table with GSI and TTL                                      | `aws_dynamodb_table`                                                                                 |
+| `api gateway`          | REST resources, methods, integrations, deployment and stage                        | API Gateway resources/methods/integrations/stage                                                     |
+| `iam`                  | Least-privilege IAM for API and worker Lambdas + CloudFront to S3 policy           | IAM roles, policies, attachments                                                                     |
+| `lambda`               | API Lambda and worker Lambda packaging/deployment                                  | `aws_lambda_function`, event source mapping, layer association                                       |
+| `sns`                  | Ops alerts topic and email subscription                                            | `aws_sns_topic`, `aws_sns_topic_subscription`                                                        |
+| `sqs`                  | Main queue, DLQ, redrive policies, and S3 send-message policy                      | `aws_sqs_queue`, queue policy, redrive policy                                                        |
+| `waf`                  | WAFv2 ACLs for CloudFront and API Gateway + associations/metrics                   | `aws_wafv2_web_acl`, `aws_wafv2_web_acl_association`                                                 |
+| `cloudwatch_dashboard` | Unified ops dashboard for metrics and logs                                         | `aws_cloudwatch_dashboard`                                                                           |
 
 ### Partially Implemented / Pending
 
@@ -198,12 +198,6 @@ Implemented features:
 - **Processing overlay via React Portal**: the compression progress overlay renders through `createPortal` into `document.body`, ensuring it always appears above all page content regardless of parent z-index stacking contexts.
 - Frontend unit tests with Vitest and Testing Library (`npm run test:ci`).
 
-Pending frontend work:
-
-- Authentication flow.
-- Full responsive pass.
-- Error-state UX and recovery paths.
-
 ## DevOps and CI/CD
 
 Implemented DevOps features:
@@ -269,18 +263,6 @@ Implemented:
 - Frontend UI locking during active uploads/processing.
 - Processing overlay rendered via React Portal for correct z-index layering.
 - Frontend unit tests with Vitest.
-
-### Future Enhancements
-
-- API Gateway throttling (usage plans + method-level limits).
-- Structured JSON logging via `aws_lambda_powertools`.
-- Pydantic v2 input validation at API boundaries.
-- pytest + moto unit tests for Lambda handlers.
-- CI security scans (Trivy, tfsec, Infracost).
-- Pre-commit hooks (black, ruff, terraform fmt).
-- OpenAPI/Swagger API documentation.
-- Frontend authentication flow.
-- Full responsive design pass.
 
 ## Getting Started
 
