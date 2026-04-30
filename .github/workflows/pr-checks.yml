@@ -119,7 +119,7 @@ jobs:
     if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       pull-requests: write
     steps:
       - name: Getting Code
@@ -136,6 +136,10 @@ jobs:
               --base main \
               --head "${{ github.ref_name }}"
             echo "Pull request created successfully."
+            
+            # Automatically enable auto-merge right after creating it
+            gh pr merge --auto --squash --delete-branch "${{ github.ref_name }}"
+            echo "Auto-merge enabled successfully."
           else
             echo "Pull request already exists for this branch. Skipping."
           fi
