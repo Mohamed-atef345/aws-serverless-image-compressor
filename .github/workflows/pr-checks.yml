@@ -1,0 +1,156 @@
+name: Pull Request Checks and Tests
+on:
+  push:
+    branches-ignore:
+      - 'main' 
+permissions:
+  contents: read
+# for multiple pushes on the same branch this workflow will cancel the previous one is it still in progress
+concurrency:
+  group: pr-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  detect-changed-files:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.changes.outputs.frontend }}
+      terraform: ${{ steps.changes.outputs.infrastructure }}
+      lambda-code: ${{ steps.changes.outputs.lambda-code }}
+    steps:
+      - name: Getting Code
+        uses: actions/checkout@v6
+      - name: Detect Changed Files
+        uses: dorny/paths-filter@v4
+        id: changes
+        with: 
+          filters: |
+            frontend: 
+              - 'apps/web/**'
+            lambda-code:
+              - 'codes/**'
+            infrastructure:
+              - 'infrastructure/**'
+
+  frontend-tests:
+    needs: detect-changed-files
+    runs-on: ubuntu-latest
+    if: ${{ needs.detect-changed-files.outputs.frontend == 'true' }}
+    steps:
+      - name: Getting Code
+        uses: actions/checkout@v6
+      - name: Setup Node with caching
+        uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: apps/web
+        run: npm ci
+      - name: Run frontend tests
+        working-directory: apps/web
+        run: npm run test:ci
+
+  lambda-code-checks:
+    name: Lambda code checks
+    needs: detect-changed-files
+    if: ${{ needs.detect-changed-files.outputs.lambda-code == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+      - name: Syntax check Lambda code
+        run: |
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/var/task" \
+            -w /var/task \
+            public.ecr.aws/sam/build-python3.14:latest \
+            /bin/sh -c "python -m compileall codes"
+
+  infrastructure-tests:
+    needs: detect-changed-files
+    if: ${{ needs.detect-changed-files.outputs.terraform == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      TF_PLUGIN_CACHE_DIR: ${{ github.workspace }}/.terraform.d/plugin-cache
+    steps:
+      - name: Getting Code
+        uses: actions/checkout@v6
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v6.1.0
+        with:
+          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
+          aws-region: ${{vars.AWS_REGION}}
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.14.9"
+      - name: Create Terraform Plugin Cache Dir
+        run: mkdir -p ${{ env.TF_PLUGIN_CACHE_DIR }}
+      - name: Cache Terraform Plugins
+        uses: actions/cache@v5
+        with:
+          path: ${{ env.TF_PLUGIN_CACHE_DIR }}
+          key: ${{ runner.os }}-terraform-${{ hashFiles('infrastructure/terraform/.terraform.lock.hcl') }}
+          restore-keys: |
+            ${{ runner.os }}-terraform-
+      - name: Initialize Terraform
+        run: |
+          cd infrastructure/terraform
+          terraform init
+      - name: Build Pillow Lambda layer
+        run: |
+          rm -rf layer/python infrastructure/terraform/modules/lambda/pillow_layer.zip
+          mkdir -p layer/python
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE/layer:/var/task/layer" \
+            public.ecr.aws/sam/build-python3.14:latest \
+            /bin/sh -c "pip install --no-cache-dir pillow -t /var/task/layer/python"
+          cd layer
+          zip -r ../infrastructure/terraform/modules/lambda/pillow_layer.zip python 
+      - name: Terraform init
+        working-directory: infrastructure/terraform
+        run: terraform init -input=false
+      - name: Terraform fmt check
+        working-directory: infrastructure/terraform
+        run: terraform fmt -check -recursive
+      - name: Terraform validate
+        working-directory: infrastructure/terraform
+        run: terraform validate
+      - name: Terraform plan
+        working-directory: infrastructure/terraform
+        run: terraform plan -input=false -var="admin_email=${{ secrets.ADMIN_EMAIL }}"
+
+  open-pull-request-if-passed:
+    needs: [frontend-tests, lambda-code-checks, infrastructure-tests]
+    if: ${{ always() && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Getting Code
+        uses: actions/checkout@v6      
+      - name: Create pull request if missing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pr_exists=$(gh pr list --head "${{ github.ref_name }}" --base main --json number --jq 'length')
+          if [ "$pr_exists" -eq "0" ]; then
+            gh pr create \
+              --title "Auto-PR: Updates from ${{ github.ref_name }} from commit ${{ github.sha }}" \
+              --body "Automated PR triggered by push to \`${{ github.ref_name }}\` from commit \`${{ github.sha }}\`." \
+              --base main \
+              --head "${{ github.ref_name }}"
+            echo "Pull request created successfully."
+            
+            # Automatically enable auto-merge right after creating it
+            gh pr merge --auto --squash --delete-branch "${{ github.ref_name }}"
+            echo "Auto-merge enabled successfully."
+          else
+            echo "Pull request already exists for this branch. Skipping."
+          fi

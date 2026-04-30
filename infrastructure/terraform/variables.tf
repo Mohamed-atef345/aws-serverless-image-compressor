@@ -135,7 +135,7 @@ variable "maxReceiveCount" {
 
 variable "admin_email" {
   type        = string
-  description = "will be passed as an input from github actions pipeline"
+  description = "will be passed as an input from github actions pipeline."
 }
 
 variable "cloudwatch_dashboard_name" {
