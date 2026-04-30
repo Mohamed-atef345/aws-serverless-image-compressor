@@ -153,5 +153,5 @@ jobs:
             echo "Pull request already exists for this branch. Skipping creation."
           fi
           # Automatically enable auto-merge for the PR (whether new or existing)
-          gh pr merge --auto --squash --delete-branch "${{ github.ref_name }}"
+          gh pr merge --auto --squash "${{ github.ref_name }}"
           echo "Auto-merge enabled successfully."
