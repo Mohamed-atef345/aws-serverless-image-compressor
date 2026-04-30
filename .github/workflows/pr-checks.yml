@@ -52,7 +52,7 @@ jobs:
         working-directory: apps/web
         run: npm run test:ci
 
-    lambda-code-checks:
+  lambda-code-checks:
     name: Lambda code checks
     needs: detect-changed-files
     if: ${{ needs.detect-changed-files.outputs.lambda-code == 'true' }}
