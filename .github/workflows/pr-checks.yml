@@ -134,8 +134,10 @@ jobs:
       pull-requests: write
     steps:
       - name: Getting Code
-        uses: actions/checkout@v6      
-      - name: Create pull request if missing
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0     
+      - name: Create pull request if missing and merge
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -147,10 +149,9 @@ jobs:
               --base main \
               --head "${{ github.ref_name }}"
             echo "Pull request created successfully."
-            
-            # Automatically enable auto-merge right after creating it
-            gh pr merge --auto --squash --delete-branch "${{ github.ref_name }}"
-            echo "Auto-merge enabled successfully."
           else
-            echo "Pull request already exists for this branch. Skipping."
+            echo "Pull request already exists for this branch. Skipping creation."
           fi
+          # Automatically enable auto-merge for the PR (whether new or existing)
+          gh pr merge --auto --squash --delete-branch "${{ github.ref_name }}"
+          echo "Auto-merge enabled successfully."
