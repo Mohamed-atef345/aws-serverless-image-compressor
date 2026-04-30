@@ -74,9 +74,9 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 | Worker Lambda | Python 3.14, Pillow (Lambda Layer), boto3                     |
 | Queue         | SQS Standard, Dead Letter Queue                               |
 | Database      | DynamoDB (single-table with `PK`/`SK`, `batch_id-index`, TTL) |
-| Storage       | S3 buckets for frontend, uploads, and compressed output       |
+| Storage       | S3 buckets for frontend, uploads (Transfer Acceleration), and compressed output |
 | IaC           | Terraform 1.x, AWS Provider 6.39                              |
-| CI/CD         | Manual/local deployment flow (GitHub Actions planned)         |
+| CI/CD         | GitHub Actions (PR checks + main deploy via OIDC)             |
 | Observability | CloudWatch logs/alarms/dashboard + SNS alerts + X-Ray tracing |
 
 ## Repository Structure
@@ -119,7 +119,7 @@ image_compressor/
 
 | Module                 | Description                                                              | Key Resources                                                         |
 | ---------------------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------- |
-| `S3_buckets`           | Frontend, uploads, and processed buckets with encryption/versioning/CORS | `aws_s3_bucket`, versioning, SSE, CORS, upload notifications          |
+| `S3_buckets`           | Frontend, uploads, and processed buckets with encryption/versioning/CORS/lifecycle | `aws_s3_bucket`, versioning, SSE, CORS, lifecycle rules, Transfer Acceleration, upload notifications |
 | `cdn`                  | CloudFront distribution with OAC, HTTPS redirect, custom 404 behavior    | `aws_cloudfront_distribution`, `aws_cloudfront_origin_access_control` |
 | `acm`                  | DNS-validated certificate for root and wildcard domain                   | `aws_acm_certificate`, validation records                             |
 | `route 53`             | Alias routing from subdomain to CloudFront                               | Route53 record set                                                    |
@@ -165,8 +165,8 @@ Notes:
 ## Processing Flow
 
 1. Client calls `POST /upload-url`.
-2. API Lambda creates DynamoDB records and returns presigned S3 upload URLs.
-3. Client uploads directly to S3 uploads bucket.
+2. API Lambda creates DynamoDB records and returns presigned S3 upload URLs (using S3 Transfer Acceleration endpoint for faster uploads).
+3. Client uploads directly to S3 uploads bucket via the accelerated endpoint.
 4. S3 `ObjectCreated` event is sent to SQS.
 5. Worker Lambda reads SQS records, fetches source objects from S3, compresses/transcodes images, writes output to processed bucket using `<original_name>_compressed.<ext>` naming, and updates DynamoDB job/batch state.
 6. Client polls `GET /batches/{batchId}` and optionally `GET /jobs/{jobId}`.
@@ -188,12 +188,15 @@ Frontend is implemented in `apps/web` as a React single-page app.
 
 Implemented features:
 
-- Presigned upload flow integration with API and S3.
+- Presigned upload flow integration with API and S3 (via Transfer Acceleration).
 - Batch/job polling and progress visualization.
 - Compression options exposed to user (`format`, `quality`, `max_width`).
 - Upload validation guardrails in the client (max `5` files, `10 MB` per file, `30 MB` batch total).
 - Premium settings panel redesign for format, quality, and max-width controls with explanatory labels.
 - Download flow for single-image and multi-image outputs, including forced browser download behavior.
+- **UI locking during uploads**: drop zone, file input, "+ Add more" button, file removal buttons, and all settings dropdowns are disabled while an upload/processing operation is in progress to prevent race conditions.
+- **Processing overlay via React Portal**: the compression progress overlay renders through `createPortal` into `document.body`, ensuring it always appears above all page content regardless of parent z-index stacking contexts.
+- Frontend unit tests with Vitest and Testing Library (`npm run test:ci`).
 
 Pending frontend work:
 
@@ -208,7 +211,7 @@ Implemented DevOps features:
 - **Terraform architecture**: modular IaC in `infrastructure/terraform/modules` for `S3_buckets`, `cdn`, `acm`, `route 53`, `dynamodb`, `api gateway`, `iam`, `lambda`, and `sqs`.
 - **State management**: remote Terraform state via S3 backend with lockfile locking enabled (`use_lockfile = true`).
 - **Edge + DNS delivery**: CloudFront distribution with OAC, ACM certificate validation, and Route53 alias record to `compression.<domain>`.
-- **Storage setup**: dedicated frontend/uploads/processed S3 buckets with SSE (`AES256`), CORS rules for upload/download flows, and S3 event notifications from uploads bucket to SQS.
+- **Storage setup**: dedicated frontend/uploads/processed S3 buckets with SSE (`AES256`), CORS rules restricted to `compression.myshortly.tech`, S3 event notifications from uploads bucket to SQS, **S3 Transfer Acceleration** enabled on the uploads bucket for faster global uploads, and **lifecycle rules** (uploads auto-deleted after 1 day, compressed files auto-deleted after 7 days).
 - **Async processing pipeline**: SQS main queue + DLQ + redrive policy, then worker Lambda event source mapping with `batch_size = 5`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
 - **Lambda packaging/runtime**: API and worker functions are packaged with Terraform `archive_file`; worker uses a Pillow Lambda layer zip and runs with `python3.14`, `120s` timeout, and `512 MB` memory.
 - **IAM least privilege**: separate API/worker Lambda roles with scoped S3, DynamoDB, SQS, and CloudWatch Logs permissions; worker role also includes X-Ray publish permissions.
@@ -217,16 +220,18 @@ Implemented DevOps features:
 - **Observability baseline**: X-Ray active tracing is enabled for API Gateway and both Lambdas.
 - **CloudWatch monitoring**: log groups with retention, service alarms (Lambda, API Gateway, SQS/DLQ, DynamoDB, CloudFront, WAF), SNS alert routing, and a centralized CloudWatch dashboard module.
 
-Current delivery workflow:
+### CI/CD Pipelines
 
-- Deployments are currently run manually via Terraform CLI (`init/plan/apply`) and local frontend build/deploy steps.
-- Pillow layer build is currently a local Docker-driven step before Terraform apply.
-- `.github/workflows` directory exists, but workflow files are still pending.
+Fully implemented GitHub Actions workflows:
 
-Planned CI/CD:
+- **PR Checks** (`.github/workflows/pr-checks.yml`): Triggers on push to any branch except `main`. Uses `dorny/paths-filter` to detect changes and conditionally runs:
+  - **Frontend tests**: installs dependencies and runs `npm run test:ci` (Vitest).
+  - **Lambda code checks**: syntax-checks Python code via `compileall` in a Docker container.
+  - **Infrastructure tests**: authenticates via OIDC, builds the Pillow Lambda layer, runs `terraform init`, `fmt -check`, `validate`, and `plan`.
+  - **Auto PR + merge**: if all checks pass, automatically creates a PR (if missing) and enables squash auto-merge.
+  - Concurrency control cancels in-progress runs on the same branch.
 
-- PR pipeline target: lint/tests/security/infra checks and `terraform plan`.
-- Merge pipeline target: OIDC auth, `terraform apply`, frontend sync, CloudFront invalidation, Lambda updates.
+- **Main Deploy** (`.github/workflows/main-deploy.yml`): Triggers on push to `main` or via manual `workflow_dispatch`. Authenticates via OIDC, builds the Pillow Lambda layer, runs `terraform apply -auto-approve`, exports Terraform outputs (API URL, bucket name, CloudFront distribution ID) as job outputs, saves all outputs as a downloadable JSON artifact, then builds and deploys the frontend to S3 with CloudFront cache invalidation. The `VITE_API_BASE_URL` is automatically injected from Terraform output at build time.
 
 ## Security
 
@@ -238,18 +243,14 @@ Implemented:
 - Presigned upload/download architecture (no image payload through API Gateway).
 - WAFv2 attached to CloudFront and API Gateway.
 - CloudWatch + SNS alerting pipeline for operational events.
-
-Planned hardening:
-
-- WAF threshold tuning and optional full WAF logging pipeline.
-- API Gateway throttling and usage controls.
-- Tightened CORS origins for production domains.
+- CORS origins restricted to production domain (`compression.myshortly.tech`).
+- S3 lifecycle rules to auto-delete temporary files (uploads: 1 day, compressed: 7 days).
 
 ## Project Status
 
 ### Completed
 
-- API Lambda module and handler.
+- API Lambda module and handler (with dual S3 clients: standard for downloads, accelerated for uploads).
 - SQS module including DLQ and S3 notification policy.
 - Worker Lambda module wiring (runtime, environment variables, SQS event source mapping).
 - Worker Lambda handler implementation in `codes/worker_lambda/handler.py`.
@@ -261,10 +262,25 @@ Planned hardening:
 - Centralized CloudWatch dashboard module for metrics and logs widgets.
 - Terraform remote state backend configuration with locking.
 - Core frontend upload and processing UX.
+- S3 Transfer Acceleration enabled on uploads bucket.
+- S3 lifecycle rules for automatic file cleanup.
+- CORS origins restricted to production domain.
+- CI/CD pipelines: PR checks workflow and main deploy workflow (with frontend build + deploy).
+- Frontend UI locking during active uploads/processing.
+- Processing overlay rendered via React Portal for correct z-index layering.
+- Frontend unit tests with Vitest.
 
-### In Progress
+### Future Enhancements
 
-- Full CI/CD workflow files in `.github/workflows`.
+- API Gateway throttling (usage plans + method-level limits).
+- Structured JSON logging via `aws_lambda_powertools`.
+- Pydantic v2 input validation at API boundaries.
+- pytest + moto unit tests for Lambda handlers.
+- CI security scans (Trivy, tfsec, Infracost).
+- Pre-commit hooks (black, ruff, terraform fmt).
+- OpenAPI/Swagger API documentation.
+- Frontend authentication flow.
+- Full responsive design pass.
 
 ## Getting Started
 
