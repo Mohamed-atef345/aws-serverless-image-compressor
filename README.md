@@ -20,11 +20,13 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 
 ### Single Image Upload & Compression
 
-<video src="assets/demos/single__image_upload.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/daaf69b0-8d33-482f-82a9-469b751a11c0
+
 
 ### Batch Upload & Compression
 
-<video src="assets/demos/batch_uoload.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/f3afed4b-f6d9-48fb-8d16-e328ed0207c6
+
 
 ### CloudWatch Ops Dashboard
 
