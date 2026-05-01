@@ -190,7 +190,7 @@ resource "aws_cloudwatch_dashboard" "ops_overview" {
           title  = "API Gateway 4XX/5XX Access Logs"
           region = var.aws_region
           view   = "table"
-          query  = "SOURCE '/aws/apigateway/image-compression-api-v1-access' | parse @message '\"status\":\"*\"' as status | parse @message '\"httpMethod\":\"*\"' as httpMethod | parse @message '\"resourcePath\":\"*\"' as resourcePath | parse @message '\"ip\":\"*\"' as ip | parse @message '\"requestId\":\"*\"' as requestId | filter toNumber(status) >= 400 | fields @timestamp, status, httpMethod, resourcePath, ip, requestId | sort @timestamp desc | limit 50"
+          query  = "SOURCE '/aws/apigateway/image-compression-api-v1-access' | fields @timestamp, @message | filter @message like /\"status\":\"4/ or @message like /\"status\":\"5/ | sort @timestamp desc | limit 50"
         }
       }
     ]
