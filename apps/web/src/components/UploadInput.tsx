@@ -368,6 +368,8 @@ export const UploadInput: React.FC = () => {
     );
   }
 
+  const isDisabled = phase !== "idle";
+
   return (
     <DropdownContext.Provider value={{openDropdownId, setOpenDropdownId}}>
       {/* Processing overlay rendered outside the card */}
@@ -386,16 +388,18 @@ export const UploadInput: React.FC = () => {
           {/* ── Drop zone ──────────────────────────────────────────────── */}
           <div
             id="drop-zone"
-            onDragOver={onDragOver}
-            onDragLeave={onDragLeave}
-            onDrop={onDrop}
-            onClick={() => files.length === 0 && fileInputRef.current?.click()}
-            className={`relative flex flex-col items-center justify-center gap-3 px-8 py-10 cursor-pointer transition-all duration-200 rounded-t-3xl ${
-              isDragOver
-                ? "bg-yellow-500/10 border-2 border-dashed border-yellow-500/50"
-                : files.length > 0
-                  ? "bg-black/40 border-b border-white/10"
-                  : "hover:bg-black/60 border-2 border-dashed border-white/10 hover:border-yellow-500/30 bg-black/40"
+            onDragOver={isDisabled ? undefined : onDragOver}
+            onDragLeave={isDisabled ? undefined : onDragLeave}
+            onDrop={isDisabled ? undefined : onDrop}
+            onClick={() => !isDisabled && files.length === 0 && fileInputRef.current?.click()}
+            className={`relative flex flex-col items-center justify-center gap-3 px-8 py-10 transition-all duration-200 rounded-t-3xl ${
+              isDisabled
+                ? "opacity-70 cursor-not-allowed bg-black/40 border-b border-white/10"
+                : isDragOver
+                  ? "cursor-pointer bg-yellow-500/10 border-2 border-dashed border-yellow-500/50"
+                  : files.length > 0
+                    ? "cursor-pointer bg-black/40 border-b border-white/10"
+                    : "cursor-pointer hover:bg-black/60 border-2 border-dashed border-white/10 hover:border-yellow-500/30 bg-black/40"
             }`}
           >
             <input
@@ -405,6 +409,7 @@ export const UploadInput: React.FC = () => {
               multiple
               accept={ACCEPTED_TYPES.join(",")}
               className="hidden"
+              disabled={isDisabled}
               onChange={(e) => addFiles(Array.from(e.target.files ?? []))}
             />
 
@@ -444,16 +449,18 @@ export const UploadInput: React.FC = () => {
                   <span className="font-schibsted font-semibold text-gray-300 text-sm">
                     {files.length} file{files.length !== 1 ? "s" : ""} selected
                   </span>
-                  <button
-                    type="button"
-                    className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors font-schibsted"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fileInputRef.current?.click();
-                    }}
-                  >
-                    + Add more
-                  </button>
+                  {!isDisabled && (
+                    <button
+                      type="button"
+                      className="text-xs text-yellow-500 hover:text-yellow-400 transition-colors font-schibsted"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fileInputRef.current?.click();
+                      }}
+                    >
+                      + Add more
+                    </button>
+                  )}
                 </div>
                 <div className="flex flex-col gap-1.5 max-h-40 overflow-y-auto pr-1">
                   {files.map((f, i) => (
@@ -485,28 +492,30 @@ export const UploadInput: React.FC = () => {
                         <span className="text-xs text-gray-500">
                           {prettySize(f.size)}
                         </span>
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            removeFile(i);
-                          }}
-                          className="text-gray-500 hover:text-red-400 transition-colors"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
+                        {!isDisabled && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              removeFile(i);
+                            }}
+                            className="text-gray-500 hover:text-red-400 transition-colors"
                           >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                              stroke="currentColor"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M6 18L18 6M6 6l12 12"
+                              />
+                            </svg>
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -533,6 +542,7 @@ export const UploadInput: React.FC = () => {
                   options={FORMAT_OPTIONS}
                   value={format}
                   onChange={setFormat}
+                  disabled={isDisabled}
                 />
                 <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
                   Choose the output file extension.
@@ -549,6 +559,7 @@ export const UploadInput: React.FC = () => {
                   options={QUALITY_OPTIONS}
                   value={quality}
                   onChange={setQuality}
+                  disabled={isDisabled}
                 />
                 <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
                   Compression vs. file size tradeoff.
@@ -565,6 +576,7 @@ export const UploadInput: React.FC = () => {
                   options={MAX_WIDTH_OPTIONS}
                   value={maxWidth}
                   onChange={setMaxWidth}
+                  disabled={isDisabled}
                 />
                 <span className="text-xs text-gray-500 font-schibsted leading-relaxed">
                   Scale down large images to fit.

@@ -25,6 +25,7 @@ from typing import Any
 
 import boto3
 from boto3.dynamodb.conditions import Attr, Key
+from botocore.config import Config
 from botocore.exceptions import ClientError
 
 # ---------------------------------------------------------------------------
@@ -53,6 +54,7 @@ MAX_BATCH_FILES: int = int(os.environ.get("MAX_BATCH_FILES", "5"))
 
 dynamodb = boto3.resource("dynamodb")
 s3_client = boto3.client("s3")
+s3_client_accelerated = boto3.client("s3", config=Config(s3={'use_accelerate_endpoint': True}))
 table = dynamodb.Table(DYNAMODB_TABLE)
 
 # ---------------------------------------------------------------------------
@@ -173,7 +175,7 @@ def _handle_upload_url(body: dict[str, Any]) -> dict[str, Any]:
         })
 
         # Generate presigned PUT URL
-        upload_url: str = s3_client.generate_presigned_url(
+        upload_url: str = s3_client_accelerated.generate_presigned_url(
             "put_object",
             Params={
                 "Bucket": UPLOADS_BUCKET,

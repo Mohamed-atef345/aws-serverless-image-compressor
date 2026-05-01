@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '../../test/test-utils';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { UploadInput } from '../UploadInput';
 import { DropdownContext } from '../CustomDropdown';
 

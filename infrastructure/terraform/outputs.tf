@@ -55,6 +55,10 @@ output "cloudfront_distribution_hosted_zone_id" {
   value = module.cdn.cloudfront_distribution_hosted_zone_id
 }
 
+output "cloudfront_distribution_id" {
+  value = module.cdn.cloudfront_distribution_id
+}
+
 output "acm_certificate_arn" {
   value = module.acm.acm_certificate_arn
 }

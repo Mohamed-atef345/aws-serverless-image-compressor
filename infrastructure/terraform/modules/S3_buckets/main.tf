@@ -50,15 +50,33 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "uploads_bucket_se
   }
 }
 
+resource "aws_s3_bucket_accelerate_configuration" "uploads_bucket_accelerate" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+  status = "Enabled"
+}
 resource "aws_s3_bucket_cors_configuration" "uploads_bucket_cors" {
   bucket = aws_s3_bucket.uploads_bucket.id
 
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["PUT", "POST"]
-    allowed_origins = ["*"]
+    # allowed_origins = ["*"] #used for local testing
+    allowed_origins = ["https://compression.myshortly.tech"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "uploads_bucket_lifecycle" {
+  bucket = aws_s3_bucket.uploads_bucket.id
+
+  rule {
+    id     = "delete-after-1-day"
+    status = "Enabled"
+
+    expiration {
+      days = 1
+    }
   }
 }
 
@@ -86,6 +104,18 @@ resource "aws_s3_bucket_versioning" "processed_bucket_versioning" {
   }
 }
 
+resource "aws_s3_bucket_lifecycle_configuration" "processed_bucket_lifecycle" {
+  bucket = aws_s3_bucket.processed_bucket.id
+
+  rule {
+    id     = "delete-after-7-day"
+    status = "Enabled"
+
+    expiration {
+      days = 7
+    }
+  }
+}
 resource "aws_s3_bucket_server_side_encryption_configuration" "processed_bucket_server_side_encryption_configuration" {
   bucket = aws_s3_bucket.processed_bucket.id
 
@@ -102,7 +132,8 @@ resource "aws_s3_bucket_cors_configuration" "processed_bucket_cors" {
   cors_rule {
     allowed_headers = ["*"]
     allowed_methods = ["GET", "HEAD"]
-    allowed_origins = ["*"]
+    # allowed_origins = ["*"] #used for local testing
+    allowed_origins = ["https://compression.myshortly.tech"]
     max_age_seconds = 3000
   }
 }
