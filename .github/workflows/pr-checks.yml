@@ -135,7 +135,7 @@ jobs:
           fetch-depth: 0     
       - name: Create pull request if missing and merge
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN_GITHUB_ACTIONS }}
         run: |
           pr_exists=$(gh pr list --head "${{ github.ref_name }}" --base main --json number --jq 'length')
           if [ "$pr_exists" -eq "0" ]; then
