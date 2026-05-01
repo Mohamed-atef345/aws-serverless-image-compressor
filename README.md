@@ -2,8 +2,7 @@
 
 ImageCompress is a serverless image compression platform on AWS. Users upload images from a React frontend, API Gateway issues presigned upload URLs, and an asynchronous S3 -> SQS -> Lambda worker pipeline compresses images and tracks progress in DynamoDB.
 
-## Table of Contents
-
+- [See it in Action](#see-it-in-action)
 - [Architecture Overview](#architecture-overview)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
@@ -16,6 +15,40 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 - [Project Status](#project-status)
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
+
+## See it in Action
+
+### Single Image Upload & Compression
+
+<video src="assets/demos/single__image_upload.mp4" controls width="100%"></video>
+
+### Batch Upload & Compression
+
+<video src="assets/demos/batch_uoload.mp4" controls width="100%"></video>
+
+### CloudWatch Ops Dashboard
+
+<p align="center">
+  <img src="assets/cloudwatch/cloudwatch-1.png" alt="CloudWatch Dashboard - Lambda & API Gateway Metrics" width="100%" />
+  <br/>
+  <img src="assets/cloudwatch/cloudwatch-2.png" alt="CloudWatch Dashboard - SQS, DynamoDB, CloudFront & WAF Metrics" width="100%" />
+</p>
+
+### AWS X-Ray Trace Map
+
+<p align="center">
+  <img src="assets/x-ray/x-ray-1.png" alt="X-Ray Trace Map - API Gateway" width="100%" />
+  <br/>
+  <img src="assets/x-ray/x-ray-2.png" alt="X-Ray Trace Map - API Lambda" width="100%" />
+  <br/>
+  <img src="assets/x-ray/x-ray-3.png" alt="X-Ray Trace Map - Worker Lambda" width="100%" />
+</p>
+
+### CI/CD Pipeline
+
+<p align="center">
+  <img src="assets/pipeline/pipeline.png" alt="GitHub Actions CI/CD Pipeline" width="100%" />
+</p>
 
 ## Architecture Overview
 
