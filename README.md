@@ -2,8 +2,9 @@
 
 ImageCompress is a serverless image compression platform on AWS. Users upload images from a React frontend, API Gateway issues presigned upload URLs, and an asynchronous S3 -> SQS -> Lambda worker pipeline compresses images and tracks progress in DynamoDB.
 
-- [See it in Action](#see-it-in-action)
+- [Architecture Diagram](#architecture-diagram)
 - [Architecture Overview](#architecture-overview)
+- [See it in Action](#see-it-in-action)
 - [Technology Stack](#technology-stack)
 - [Repository Structure](#repository-structure)
 - [Infrastructure Modules](#infrastructure-modules)
@@ -16,17 +17,47 @@ ImageCompress is a serverless image compression platform on AWS. Users upload im
 - [Getting Started](#getting-started)
 - [Environment Variables](#environment-variables)
 
+## Architecture Diagram
+
+<p align="center">
+  <img src="assets/Cloud_Architecture.svg" alt="AWS serverless image compression architecture diagram" width="100%" />
+</p>
+
+High-level architecture. Some secondary follow-up browser requests, such as the final presigned download from the processed S3 bucket, are omitted in the diagram for readability.
+
+## Architecture Overview
+
+This project uses a serverless AWS architecture with direct-to-S3 uploads, asynchronous image processing, and operational monitoring.
+
+### Runtime Flow
+
+1. The browser resolves `compression.myshortly.tech` through Route 53 and fetches the React frontend from CloudFront, which uses an S3 bucket as its origin through Origin Access Control (OAC).
+2. Frontend API requests go directly to API Gateway, protected by a regional AWS WAF. API Gateway invokes the Python API Lambda using `AWS_PROXY` integrations.
+3. `POST /upload-url` creates batch and job records in DynamoDB, then returns presigned upload URLs for the uploads S3 bucket. The uploads bucket has S3 Transfer Acceleration enabled.
+4. The browser uploads images directly to the uploads bucket using those presigned URLs instead of sending file payloads through API Gateway.
+5. S3 `ObjectCreated` notifications send messages to the main SQS queue.
+6. The worker Lambda, which includes a Pillow Lambda layer, consumes SQS messages in batches, downloads the original image from the uploads bucket, compresses or transcodes it, stores the result in the processed bucket, and updates DynamoDB job and batch status.
+7. Failed SQS messages are retried and eventually moved to the DLQ according to the redrive policy.
+8. The browser polls batch or job status through API Gateway. When processing is complete, the API Lambda returns a presigned download URL for a single output file or creates a ZIP in the processed bucket and returns a presigned URL for that archive.
+
+### Core Services
+
+- **Frontend delivery**: Route 53, ACM, CloudFront, CloudFront WAF, and the frontend S3 bucket.
+- **API layer**: API Gateway, API Gateway WAF, and the API Lambda.
+- **Async processing**: uploads S3 bucket, SQS queue, SQS DLQ, worker Lambda, and Pillow Lambda layer.
+- **Data and storage**: DynamoDB for job and batch metadata, plus separate uploads and processed S3 buckets.
+- **Observability**: CloudWatch Logs, CloudWatch Dashboard, CloudWatch Alarms, SNS email notifications, and X-Ray tracing.
+- **Delivery and IaC**: GitHub Actions, Terraform, and the Terraform backend S3 bucket with lockfile-based state locking.
+
 ## See it in Action
 
 ### Single Image Upload & Compression
 
 https://github.com/user-attachments/assets/daaf69b0-8d33-482f-82a9-469b751a11c0
 
-
 ### Batch Upload & Compression
 
 https://github.com/user-attachments/assets/f3afed4b-f6d9-48fb-8d16-e328ed0207c6
-
 
 ### CloudWatch Ops Dashboard
 
@@ -51,52 +82,6 @@ https://github.com/user-attachments/assets/f3afed4b-f6d9-48fb-8d16-e328ed0207c6
 <p align="center">
   <img src="assets/pipeline/pipeline.png" alt="GitHub Actions CI/CD Pipeline" width="100%" />
 </p>
-
-## Architecture Overview
-
-```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                  FRONTEND                                   │
-│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐ │
-│  │   React     │──▶│  CloudFront  │──▶│         S3 (Static)             │ │
-│  │   (Vite)    │    │     CDN      │    │      apps/web/dist              │ │
-│  └─────────────┘    └──────────────┘    └─────────────────────────────────┘ │
-└────────────────────────────┬────────────────────────────────────────────────┘
-                             │ HTTPS
-                             ▼
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                 API LAYER                                   │
-│  ┌──────────────┐    ┌─────────────────────────────────┐                    │
-│  │ API Gateway  │──▶│        Lambda (API)             │                    │
-│  │   REST API   │    │   codes/apigw_lambda/handler.py │                    │
-│  └──────────────┘    └─────────────────────────────────┘                    │
-└────────────────────────────┬────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                              PROCESSING LAYER                                │
-│  ┌─────────────┐    ┌──────────────┐    ┌─────────────────────────────────┐  │
-│  │ S3 (Upload) │──▶│     SQS      │──▶│      Lambda (Worker)            │  │
-│  │   Event     │    │    Queue     │    │  codes/worker_lambda/handler.py │  │
-│  └─────────────┘    └──────────────┘    └─────────────────────────────────┘  │
-│                            │                           │                     │
-│                            ▼                           ▼                     │
-│                     ┌──────────────┐         ┌─────────────────────────────┐ │
-│                     │     DLQ      │         │       S3 (Compressed)       │ │
-│                     │ Dead Letter  │         │        Output Bucket        │ │
-│                     └──────────────┘         └─────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────┘
-                             │
-                             ▼
-┌──────────────────────────────────────────────────────────────────────────────┐
-│                               DATA LAYER                                     │
-│  ┌─────────────────────────────────────────────────────────────────────────┐ │
-│  │                               DynamoDB                                  │ │
-│  │                        Jobs / Batches Table                             │ │
-│  │        PK | SK | jobId | status | original_key | compressed_key | TTL   │ │
-│  └─────────────────────────────────────────────────────────────────────────┘ │
-└──────────────────────────────────────────────────────────────────────────────┘
-```
 
 ## Technology Stack
 
@@ -212,7 +197,7 @@ Worker configuration:
 - SQS batch size: 5
 - Batching window: 2 seconds
 - Lambda timeout: 120 seconds
-- Worker Lambda memory: 512 MB
+- Worker Lambda memory: 1024 MB
 - SQS visibility timeout: 120 seconds
 - Max receive count: 3 (to DLQ)
 - Partial batch response: enabled via `ReportBatchItemFailures`
@@ -242,7 +227,7 @@ Implemented DevOps features:
 - **Edge + DNS delivery**: CloudFront distribution with OAC, ACM certificate validation, and Route53 alias record to `compression.<domain>`.
 - **Storage setup**: dedicated frontend/uploads/processed S3 buckets with SSE (`AES256`), CORS rules restricted to `compression.myshortly.tech`, S3 event notifications from uploads bucket to SQS, **S3 Transfer Acceleration** enabled on the uploads bucket for faster global uploads, and **lifecycle rules** (uploads auto-deleted after 1 day, compressed files auto-deleted after 7 days).
 - **Async processing pipeline**: SQS main queue + DLQ + redrive policy, then worker Lambda event source mapping with `batch_size = 5`, `maximum_batching_window_in_seconds = 2`, and `ReportBatchItemFailures`.
-- **Lambda packaging/runtime**: API and worker functions are packaged with Terraform `archive_file`; worker uses a Pillow Lambda layer zip and runs with `python3.14`, `120s` timeout, and `512 MB` memory.
+- **Lambda packaging/runtime**: API and worker functions are packaged with Terraform `archive_file`; worker uses a Pillow Lambda layer zip and runs with `python3.14`, `120s` timeout, and `1024 MB` memory.
 - **IAM least privilege**: separate API/worker Lambda roles with scoped S3, DynamoDB, SQS, and CloudWatch Logs permissions; worker role also includes X-Ray publish permissions.
 - **API deployment plumbing**: API Gateway REST resources/methods/integrations/stage are provisioned in Terraform with Lambda invoke permissions from API Gateway.
 - **Edge and API protection**: WAFv2 ACLs are attached to both CloudFront and API Gateway with managed rule groups and rate limiting.
