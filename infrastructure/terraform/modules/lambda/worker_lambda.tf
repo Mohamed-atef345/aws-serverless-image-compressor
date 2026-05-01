@@ -22,7 +22,7 @@ resource "aws_lambda_function" "worker_lambda" {
   layers        = [aws_lambda_layer_version.pillow_layer.arn]
   timeout       = 120
   runtime       = "python3.14"
-  memory_size   = 512
+  memory_size   = 1024
 
   environment {
     variables = {
