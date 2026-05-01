@@ -145,9 +145,16 @@ jobs:
               --base main \
               --head "${{ github.ref_name }}"
             echo "Pull request created successfully."
+            gh pr merge --auto --squash "${{ github.ref_name }}"
+            echo "Auto-merge enabled successfully."
           else
-            echo "Pull request already exists for this branch. Skipping creation."
+            #only auto-merge PRs created by this workflow (not manually created PRs)
+            # Check if the existing PR was created by this workflow
+            pr_title=$(gh pr list --head "${{ github.ref_name }}" --base main --json title --jq '.[0].title')
+            if [[ "$pr_title" == Auto-PR:* ]]; then
+              gh pr merge --auto --squash "${{ github.ref_name }}"
+              echo "Auto-merge enabled on existing automated PR."
+            else
+              echo "Manual PR detected. Skipping auto-merge."
+            fi
           fi
-          # Automatically enable auto-merge for the PR (whether new or existing)
-          gh pr merge --auto --squash "${{ github.ref_name }}"
-          echo "Auto-merge enabled successfully."
