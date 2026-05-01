@@ -71,7 +71,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads_bucket_lifecycle" {
   bucket = aws_s3_bucket.uploads_bucket.id
 
   rule {
-    id = "delete-after-1-day"
+    id     = "delete-after-1-day"
     status = "Enabled"
 
     expiration {
@@ -108,7 +108,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "processed_bucket_lifecycle" {
   bucket = aws_s3_bucket.processed_bucket.id
 
   rule {
-    id = "delete-after-7-day"
+    id     = "delete-after-7-day"
     status = "Enabled"
 
     expiration {
