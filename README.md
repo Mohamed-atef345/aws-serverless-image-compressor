@@ -103,8 +103,26 @@ https://github.com/user-attachments/assets/f3afed4b-f6d9-48fb-8d16-e328ed0207c6
 
 ```
 image_compressor/
+├── .github/
+│   └── workflows/
+│       ├── main-deploy.yml               # Main branch deploy pipeline
+│       └── pr-checks.yml                 # PR checks and auto-PR workflow
 ├── apps/
-│   └── web/                              # React frontend
+│   └── web/                              # React + Vite frontend
+│       ├── public/
+│       ├── src/
+│       │   ├── api/                      # API client layer
+│       │   ├── components/               # UI sections and upload components
+│       │   ├── test/                     # Test helpers and setup
+│       │   └── __tests__/                # Frontend and API tests
+│       ├── package.json
+│       └── vite.config.ts
+├── assets/
+│   ├── Cloud_Architecture.svg            # Architecture diagram
+│   ├── cloudwatch/                       # Dashboard screenshots
+│   ├── demos/                            # Demo videos
+│   ├── pipeline/                         # CI/CD screenshots
+│   └── x-ray/                            # X-Ray screenshots
 ├── codes/
 │   ├── apigw_lambda/
 │   │   └── handler.py                    # API Lambda handler
@@ -132,6 +150,8 @@ image_compressor/
 ├── .gitignore
 └── README.md
 ```
+
+Ignored and generated directories such as `docs/`, `layer/`, `node_modules/`, `dist/`, and Terraform local state artifacts are intentionally omitted here.
 
 ## Infrastructure Modules
 
@@ -222,7 +242,7 @@ Implemented features:
 
 Implemented DevOps features:
 
-- **Terraform architecture**: modular IaC in `infrastructure/terraform/modules` for `S3_buckets`, `cdn`, `acm`, `route 53`, `dynamodb`, `api gateway`, `iam`, `lambda`, and `sqs`.
+- **Terraform architecture**: modular IaC in `infrastructure/terraform/modules` for `S3_buckets`, `cdn`, `acm`, `route 53`, `dynamodb`, `api gateway`, `iam`, `lambda`, `sqs`, `sns`, `waf`, `cloudwatch_dashboard`, and a currently disabled `vpc` module.
 - **State management**: remote Terraform state via S3 backend with lockfile locking enabled (`use_lockfile = true`).
 - **Edge + DNS delivery**: CloudFront distribution with OAC, ACM certificate validation, and Route53 alias record to `compression.<domain>`.
 - **Storage setup**: dedicated frontend/uploads/processed S3 buckets with SSE (`AES256`), CORS rules restricted to `compression.myshortly.tech`, S3 event notifications from uploads bucket to SQS, **S3 Transfer Acceleration** enabled on the uploads bucket for faster global uploads, and **lifecycle rules** (uploads auto-deleted after 1 day, compressed files auto-deleted after 7 days).
@@ -288,7 +308,7 @@ Implemented:
 
 ### Prerequisites
 
-- Terraform >= 1.0
+- Terraform >= 1.4
 - AWS CLI configured with appropriate credentials
 - Node.js >= 18 (or Bun)
 - Python 3.14
@@ -359,7 +379,6 @@ npm run dev
 | `UPLOADS_BUCKET`       | Upload bucket for presigned PUT URLs                      |
 | `COMPRESSED_BUCKET`    | Output bucket for presigned download URLs                 |
 | `PRESIGNED_URL_TTL`    | Presigned URL expiration in seconds                       |
-| `DDB_TTL_SECONDS`      | Optional TTL horizon override for records                 |
 | `MAX_FILE_SIZE_BYTES`  | Max allowed size for a single upload (default 10 MB)      |
 | `MAX_BATCH_SIZE_BYTES` | Max allowed size for all files in a batch (default 30 MB) |
 | `MAX_BATCH_FILES`      | Max files per batch (configured as `5`)                   |
