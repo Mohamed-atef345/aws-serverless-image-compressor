@@ -26,7 +26,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
-          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
+          role-to-assume: arn:aws:iam::${{vars.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
           aws-region: ${{vars.AWS_REGION}}
       - name: Build Pillow Lambda layer
         run: |
@@ -89,7 +89,7 @@ jobs:
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v6.1.0
         with:
-          role-to-assume: arn:aws:iam::${{secrets.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
+          role-to-assume: arn:aws:iam::${{vars.AWS_ACCOUNT_ID}}:role/${{secrets.GitHubActionsDeployRole}}
           aws-region: ${{vars.AWS_REGION}}
       - name: Deploy to S3 and invalidate CloudFront
         run: |
