@@ -5,12 +5,12 @@ on:
       - main
   workflow_dispatch:
 
-permissions:
-  contents: read
-
 jobs:
   infrastructure-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     outputs:
       api_url: ${{ steps.tf-outputs.outputs.api_url }}
       web_bucket: ${{ steps.tf-outputs.outputs.web_bucket }}
@@ -66,6 +66,9 @@ jobs:
   web-deploy:
     needs: infrastructure-deploy
     runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
     steps:
       - name: Getting Code
         uses: actions/checkout@v6
