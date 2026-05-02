@@ -308,7 +308,7 @@ Implemented:
 
 ### Prerequisites
 
-- Terraform >= 1.4
+- Terraform >= 1.14
 - AWS CLI configured with appropriate credentials
 - Node.js >= 18 (or Bun)
 - Python 3.14
